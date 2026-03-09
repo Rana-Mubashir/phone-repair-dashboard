@@ -1,5 +1,5 @@
 import SvgColor from "src/components/svg-color";
-import { FiSettings } from 'react-icons/fi'; // you can use others like MdSettings, AiFillSetting, etc.
+import { FiSettings ,FiTool, FiMapPin} from 'react-icons/fi'; // you can use others like MdSettings, AiFillSetting, etc.
 
 const icon = (name) => (
   <SvgColor src={`/assets/icons/navbar/${name}.svg`} sx={{ width: 1, height: 1 }} />
@@ -7,13 +7,29 @@ const icon = (name) => (
 
 const navConfig = [
   {
-    title: 'dashboard',
+    title: 'Dashboard',
     path: '/dashboard',
     icon: icon('ic_analytics'),
   },
+
+  {
+    title: 'Repairs',
+    icon: <FiTool size={21} />,
+    children: [
+      {
+        title: 'Booked Repairs',
+        path: '/booked-repairs',
+      },
+      {
+        title: 'Repair Options',
+        path: '/repair-options',
+      },
+    ],
+  },
+
   {
     title: 'Catalog',
-    icon: <FiSettings size={21}/>, // or any folder-style icon
+    icon: <FiSettings size={21} />,
     children: [
       {
         title: 'Category Settings',
@@ -33,11 +49,18 @@ const navConfig = [
       },
     ],
   },
+
   {
-    title: 'Repair Options',
-    icon: <FiSettings size={21}/>,
-    path:'/repair-options'
+    title: 'Shop Settings',
+    icon: <FiMapPin size={21} />,
+    children: [
+      {
+        title: 'Shop Addresses',
+        path: '/shop-addresses',
+      },
+    ],
   },
 ];
+
 
 export default navConfig;

@@ -41,49 +41,6 @@ const sampleDevices = [
     { id: 6, name: "MacBook Air" },
 ]
 
-// const sampleRepairOptions = [
-//     {
-//         id: 1,
-//         deviceId: 1,
-//         name: "Screen Replacement",
-//         price: 149.99,
-//         duration: "1 hour",
-//         description: "Replace damaged screen with a new one",
-//     },
-//     {
-//         id: 2,
-//         deviceId: 1,
-//         name: "Battery Replacement",
-//         price: 79.99,
-//         duration: "45 min",
-//         description: "Replace old or damaged battery",
-//     },
-//     {
-//         id: 3,
-//         deviceId: 1,
-//         name: "Charging Port Repair",
-//         price: 89.99,
-//         duration: "1 hour",
-//         description: "Fix charging port issues",
-//     },
-//     {
-//         id: 4,
-//         deviceId: 2,
-//         name: "Screen Replacement",
-//         price: 129.99,
-//         duration: "1 hour",
-//         description: "Replace damaged screen with a new one",
-//     },
-//     {
-//         id: 5,
-//         deviceId: 3,
-//         name: "Back Glass Repair",
-//         price: 99.99,
-//         duration: "1.5 hours",
-//         description: "Replace cracked back glass",
-//     },
-// ]
-
 export default function RepairOptionsPage() {
     const [selectedDevice, setSelectedDevice] = useState(null)
     const [repairOptions, setRepairOptions] = useState(null)
