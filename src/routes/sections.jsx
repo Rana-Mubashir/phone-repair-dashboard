@@ -13,7 +13,7 @@ export const BrandsSetting = lazy(() => import('src/pages/BrandsSetting'));
 export const SeriesSetting = lazy(() => import('src/pages/SeriesSetting'));
 export const RepairOptions = lazy(() => import('src/pages/RepairOptions'));
 export const ShopAddresses = lazy(() => import('src/pages/ShopAddresses'));
-
+export const BookedRepairs = lazy(() => import('src/pages/BookedRepairs'));
 
 
 // ----------------------------------------------------------------------
@@ -47,6 +47,7 @@ export default function Router() {
         { path: 'device-settings', element: <DeviceSetting /> },
         { path: 'repair-options', element: <RepairOptions /> },
         { path: 'shop-addresses', element: <ShopAddresses /> },
+        { path: 'booked-repairs', element: <BookedRepairs /> },
       ],
     },
     {
