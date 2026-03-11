@@ -31,7 +31,20 @@ import {
   CircularProgress,
   Alert,
   useTheme,
-  alpha
+  alpha,
+  Pagination,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  FormHelperText,
+  RadioGroup,
+  FormControlLabel,
+  Radio,
+  TextareaAutosize,
+  Snackbar,
+  Tab,
+  Tabs
 } from '@mui/material';
 
 import {
@@ -56,7 +69,12 @@ import {
   FaCheckCircle,
   FaExclamationCircle,
   FaTruck,
-  FaStore
+  FaStore,
+  FaPaperPlane,
+  FaHistory,
+  FaCheck,
+  FaBan,
+  FaUndo
 } from 'react-icons/fa';
 import axios from 'axios';
 
@@ -66,25 +84,62 @@ function BookedRepairsPage() {
   const [loading, setLoading] = useState(true);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [selectedBooking, setSelectedBooking] = useState(null);
+  const [pagination, setPagination] = useState({
+    page: 1,
+    limit: 10,
+    total: 0,
+    pages: 1,
+    hasNextPage: false,
+    hasPrevPage: false
+  });
   const [filters, setFilters] = useState({
     search: '',
     repairType: 'all',
     repairOption: 'all',
+    status: 'all',
     dateRange: 'all',
     clinic: 'all'
   });
   const [showFilters, setShowFilters] = useState(false);
   const [stats, setStats] = useState({
     total: 0,
+    pending: 0,
+    confirmed: 0,
+    completed: 0,
+    rejected: 0,
     clinic: 0,
     home: 0,
     mail: 0,
     today: 0
   });
 
+  // Email Dialog State
+  const [emailDialogOpen, setEmailDialogOpen] = useState(false);
+  const [emailType, setEmailType] = useState('confirmation');
+  const [emailSubject, setEmailSubject] = useState('');
+  const [emailBody, setEmailBody] = useState('');
+  const [sendingEmail, setSendingEmail] = useState(false);
+  const [emailSuccess, setEmailSuccess] = useState(null);
+
+  // Status Update Dialog
+  const [statusDialogOpen, setStatusDialogOpen] = useState(false);
+  const [newStatus, setNewStatus] = useState('');
+  const [statusNote, setStatusNote] = useState('');
+  const [updatingStatus, setUpdatingStatus] = useState(false);
+
+  // Snackbar
+  const [snackbar, setSnackbar] = useState({
+    open: false,
+    message: '',
+    severity: 'success'
+  });
+
+  // Tab for booking details
+  const [detailsTab, setDetailsTab] = useState(0);
+
   useEffect(() => {
     fetchBookings();
-  }, []);
+  }, [pagination.page, filters]);
 
   useEffect(() => {
     if (bookings.length > 0) {
@@ -95,77 +150,29 @@ function BookedRepairsPage() {
   const fetchBookings = async () => {
     setLoading(true);
     try {
+      const params = new URLSearchParams({
+        page: pagination.page,
+        limit: pagination.limit,
+        ...(filters.search && { search: filters.search }),
+        ...(filters.repairType !== 'all' && { repairType: filters.repairType }),
+        ...(filters.repairOption !== 'all' && { repairOption: filters.repairOption }),
+        ...(filters.status !== 'all' && { status: filters.status })
+      });
 
-    //   setTimeout(() => {
-    //     const mockBookings = [
-    //       {
-    //         _id: '1',
-    //         bookingNumber: 'BR-2024-001',
-    //         firstName: 'John',
-    //         lastName: 'Doe',
-    //         email: 'john.doe@email.com',
-    //         phone: '+1 (555) 123-4567',
-    //         deviceName: 'iPhone 13 Pro',
-    //         repairType: 'Screen Replacement',
-    //         repairOption: 'clinic',
-    //         price: 199.99,
-    //         date: new Date(),
-    //         timeSlot: '10:00 AM - 11:00 AM',
-    //         bookingDate: format(new Date(), 'MM/dd/yyyy'),
-    //         bookingTime: '09:30 AM',
-    //         notes: 'Customer mentioned phone was dropped in water',
-    //         clinic: 'Downtown Clinic'
-    //       },
-    //       {
-    //         _id: '2',
-    //         bookingNumber: 'BR-2024-002',
-    //         firstName: 'Jane',
-    //         lastName: 'Smith',
-    //         email: 'jane.smith@email.com',
-    //         phone: '+1 (555) 987-6543',
-    //         deviceName: 'Samsung Galaxy S22',
-    //         repairType: 'Battery Replacement',
-    //         repairOption: 'home',
-    //         price: 89.99,
-    //         date: new Date(Date.now() + 86400000),
-    //         timeSlot: '2:00 PM - 3:00 PM',
-    //         bookingDate: format(new Date(), 'MM/dd/yyyy'),
-    //         bookingTime: '11:15 AM',
-    //         notes: 'Battery drains quickly',
-    //         clinic: 'Mobile Service'
-    //       },
-    //       {
-    //         _id: '3',
-    //         bookingNumber: 'BR-2024-003',
-    //         firstName: 'Robert',
-    //         lastName: 'Johnson',
-    //         email: 'robert.j@email.com',
-    //         phone: '+1 (555) 456-7890',
-    //         deviceName: 'MacBook Pro',
-    //         repairType: 'Software Issue',
-    //         repairOption: 'mail',
-    //         price: 129.99,
-    //         date: new Date(Date.now() + 172800000),
-    //         timeSlot: '9:00 AM - 5:00 PM',
-    //         bookingDate: format(new Date(), 'MM/dd/yyyy'),
-    //         bookingTime: '2:30 PM',
-    //         notes: 'Device not turning on',
-    //         clinic: 'Mail-in Service'
-    //       }
-    //     ];
-    //     setBookings(mockBookings);
-    //     setLoading(false);
-    //   }, 1500);
-
-    const resp = await axios.get(`${import.meta.env.VITE_SERVER_URL}/api/booking`)
-    if(resp){
-        console.log("resp for booked repairs",resp)
-        setBookings(resp?.data?.data || [])
-        setLoading(false)
-    }
-
+      const resp = await axios.get(`${import.meta.env.VITE_SERVER_URL}/api/booking?${params}`);
+      if (resp.data) {
+        setBookings(resp.data.data || []);
+        setPagination(resp.data.pagination || {
+          page: 1,
+          limit: 10,
+          total: resp.data.data?.length || 0,
+          pages: 1
+        });
+      }
     } catch (error) {
       console.error('Error fetching bookings:', error);
+      showSnackbar('Error fetching bookings', 'error');
+    } finally {
       setLoading(false);
     }
   };
@@ -175,68 +182,73 @@ function BookedRepairsPage() {
     const stats = bookings.reduce((acc, booking) => {
       acc.total++;
       
+      // Status counts
+      if (booking.status === 'pending') acc.pending++;
+      else if (booking.status === 'confirmed') acc.confirmed++;
+      else if (booking.status === 'completed') acc.completed++;
+      else if (booking.status === 'rejected') acc.rejected++;
+      
+      // Option counts
       if (booking.repairOption === 'clinic') acc.clinic++;
       if (booking.repairOption === 'home') acc.home++;
       if (booking.repairOption === 'mail') acc.mail++;
       
+      // Today's bookings
       if (new Date(booking.date).toDateString() === today) acc.today++;
       
       return acc;
-    }, { total: 0, clinic: 0, home: 0, mail: 0, today: 0 });
+    }, { total: 0, pending: 0, confirmed: 0, completed: 0, rejected: 0, clinic: 0, home: 0, mail: 0, today: 0 });
     
     setStats(stats);
   };
 
-  const getFilteredBookings = () => {
-    return bookings.filter(booking => {
-      if (filters.search) {
-        const searchTerm = filters.search.toLowerCase();
-        const matchesSearch = 
-          booking.bookingNumber?.toLowerCase().includes(searchTerm) ||
-          `${booking.firstName} ${booking.lastName}`.toLowerCase().includes(searchTerm) ||
-          booking.email?.toLowerCase().includes(searchTerm) ||
-          booking.phone?.includes(searchTerm) ||
-          booking.deviceName?.toLowerCase().includes(searchTerm);
-        
-        if (!matchesSearch) return false;
-      }
+  const handlePageChange = (event, value) => {
+    setPagination(prev => ({ ...prev, page: value }));
+  };
 
-      if (filters.repairType !== 'all' && booking.repairType !== filters.repairType) {
-        return false;
-      }
+  const handleViewDetails = (booking) => {
+    setSelectedBooking(booking);
+    setDrawerOpen(true);
+    setDetailsTab(0);
+  };
 
-      if (filters.repairOption !== 'all' && booking.repairOption !== filters.repairOption) {
-        return false;
-      }
+  const getRepairOptionIcon = (option) => {
+    switch (option) {
+      case 'clinic': return <FaStore size={14} />;
+      case 'home': return <FaHome size={14} />;
+      case 'mail': return <FaEnvelope size={14} />;
+      default: return <FaWrench size={14} />;
+    }
+  };
 
-      if (filters.dateRange !== 'all') {
-        const bookingDate = new Date(booking.date);
-        const today = new Date();
-        const tomorrow = new Date(today);
-        tomorrow.setDate(tomorrow.getDate() + 1);
-        const thisWeek = new Date(today);
-        thisWeek.setDate(thisWeek.getDate() + 7);
-        const thisMonth = new Date(today);
-        thisMonth.setMonth(thisMonth.getMonth() + 1);
+  const getStatusColor = (status) => {
+    switch (status) {
+      case 'confirmed': return 'success';
+      case 'pending': return 'warning';
+      case 'rejected': return 'error';
+      case 'completed': return 'info';
+      case 'cancelled': return 'default';
+      default: return 'default';
+    }
+  };
 
-        switch (filters.dateRange) {
-          case 'today':
-            if (bookingDate.toDateString() !== today.toDateString()) return false;
-            break;
-          case 'tomorrow':
-            if (bookingDate.toDateString() !== tomorrow.toDateString()) return false;
-            break;
-          case 'thisWeek':
-            if (bookingDate > thisWeek) return false;
-            break;
-          case 'thisMonth':
-            if (bookingDate > thisMonth) return false;
-            break;
-        }
-      }
+  const getStatusIcon = (status) => {
+    switch (status) {
+      case 'confirmed': return <FaCheckCircle size={14} />;
+      case 'pending': return <FaClock size={14} />;
+      case 'rejected': return <FaBan size={14} />;
+      case 'completed': return <FaCheck size={14} />;
+      default: return <FaExclamationCircle size={14} />;
+    }
+  };
 
-      return true;
-    });
+  const getRepairOptionColor = (option) => {
+    switch (option) {
+      case 'clinic': return 'primary';
+      case 'home': return 'success';
+      case 'mail': return 'secondary';
+      default: return 'default';
+    }
   };
 
   const resetFilters = () => {
@@ -244,43 +256,151 @@ function BookedRepairsPage() {
       search: '',
       repairType: 'all',
       repairOption: 'all',
+      status: 'all',
       dateRange: 'all',
       clinic: 'all'
     });
+    setPagination(prev => ({ ...prev, page: 1 }));
   };
 
-  const handleViewDetails = (booking) => {
-    setSelectedBooking(booking);
-    setDrawerOpen(true);
-  };
+  // Email Templates
+  const emailTemplates = {
+    confirmation: {
+      subject: `Booking Confirmed - ${selectedBooking?.bookingNumber || ''}`,
+      body: `Dear {customerName},
 
-  const getRepairOptionIcon = (option) => {
-    switch (option) {
-      case 'clinic':
-        return <FaStore size={14} />;
-      case 'home':
-        return <FaHome size={14} />;
-      case 'mail':
-        return <FaEnvelope size={14} />;
-      default:
-        return <FaWrench size={14} />;
+Your repair booking has been confirmed!
+
+Booking Details:
+- Booking Number: {bookingNumber}
+- Device: {deviceName}
+- Repair Type: {repairType}
+- Date: {date}
+- Time: {timeSlot}
+- Location: {location}
+
+Thank you for choosing TechFix Pro!
+
+Best regards,
+TechFix Pro Team`
+    },
+    reminder: {
+      subject: `Reminder: Upcoming Repair - ${selectedBooking?.bookingNumber || ''}`,
+      body: `Dear {customerName},
+
+This is a reminder of your upcoming repair appointment:
+
+Date: {date}
+Time: {timeSlot}
+Device: {deviceName}
+Location: {location}
+
+We look forward to seeing you!
+
+TechFix Pro Team`
+    },
+    rejection: {
+      subject: `Booking Update - ${selectedBooking?.bookingNumber || ''}`,
+      body: `Dear {customerName},
+
+We regret to inform you that we are unable to proceed with your booking at this time.
+
+Booking Number: {bookingNumber}
+
+If you have any questions, please don't hesitate to contact us.
+
+Best regards,
+TechFix Pro Team`
+    },
+    completed: {
+      subject: `Repair Completed - ${selectedBooking?.bookingNumber || ''}`,
+      body: `Dear {customerName},
+
+Your device repair has been completed successfully!
+
+Device: {deviceName}
+Repair: {repairType}
+
+You can pick up your device during our business hours.
+
+Thank you for choosing TechFix Pro!`
     }
   };
 
-  const getRepairOptionColor = (option) => {
-    switch (option) {
-      case 'clinic':
-        return 'primary';
-      case 'home':
-        return 'success';
-      case 'mail':
-        return 'secondary';
-      default:
-        return 'default';
+  const handleEmailTypeChange = (type) => {
+    setEmailType(type);
+    if (type !== 'custom' && selectedBooking) {
+      const template = emailTemplates[type];
+      setEmailSubject(template.subject);
+      setEmailBody(template.body
+        .replace('{customerName}', `${selectedBooking.firstName} ${selectedBooking.lastName}`)
+        .replace('{bookingNumber}', selectedBooking.bookingNumber)
+        .replace('{deviceName}', selectedBooking.deviceName)
+        .replace('{repairType}', selectedBooking.repairType)
+        .replace('{date}', selectedBooking.date)
+        .replace('{timeSlot}', selectedBooking.timeSlot)
+        .replace('{location}', selectedBooking.repairOption === 'clinic' && selectedBooking.clinicDetails?.name 
+          ? selectedBooking.clinicDetails.name 
+          : selectedBooking.repairOption)
+      );
+    } else {
+      setEmailSubject('');
+      setEmailBody('');
     }
   };
 
-  const filteredBookings = getFilteredBookings();
+  const sendEmail = async () => {
+    if (!selectedBooking) return;
+    
+    setSendingEmail(true);
+    try {
+      await axios.post(`${import.meta.env.VITE_SERVER_URL}/api/booking/${selectedBooking._id}/send-email`, {
+        type: emailType,
+        subject: emailSubject,
+        body: emailBody,
+        customMessage: emailBody
+      });
+      
+      showSnackbar('Email sent successfully', 'success');
+      setEmailDialogOpen(false);
+      
+      // Refresh booking details
+      fetchBookings();
+    } catch (error) {
+      console.error('Error sending email:', error);
+      showSnackbar('Failed to send email', 'error');
+    } finally {
+      setSendingEmail(false);
+    }
+  };
+
+  const updateBookingStatus = async () => {
+    if (!selectedBooking || !newStatus) return;
+    
+    setUpdatingStatus(true);
+    try {
+      await axios.patch(`${import.meta.env.VITE_SERVER_URL}/api/booking/${selectedBooking._id}/status`, {
+        status: newStatus,
+        note: statusNote
+      });
+      
+      showSnackbar(`Booking ${newStatus} successfully`, 'success');
+      setStatusDialogOpen(false);
+      
+      // Refresh booking details
+      fetchBookings();
+      setSelectedBooking(prev => ({ ...prev, status: newStatus }));
+    } catch (error) {
+      console.error('Error updating status:', error);
+      showSnackbar('Failed to update status', 'error');
+    } finally {
+      setUpdatingStatus(false);
+    }
+  };
+
+  const showSnackbar = (message, severity) => {
+    setSnackbar({ open: true, message, severity });
+  };
 
   const StatCard = ({ icon: Icon, label, value, color }) => (
     <Card elevation={0} sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 2 }}>
@@ -328,19 +448,19 @@ function BookedRepairsPage() {
       <Box sx={{ maxWidth: 1400, mx: 'auto', px: 3, py: 4 }}>
         <Grid container spacing={3}>
           <Grid item xs={12} sm={6} md={2.4}>
-            <StatCard icon={FaWrench} label="Total Bookings" value={stats.total} color="primary" />
+            <StatCard icon={FaWrench} label="Total" value={stats.total} color="primary" />
           </Grid>
           <Grid item xs={12} sm={6} md={2.4}>
-            <StatCard icon={FaStore} label="Clinic Visits" value={stats.clinic} color="primary" />
+            <StatCard icon={FaClock} label="Pending" value={stats.pending} color="warning" />
           </Grid>
           <Grid item xs={12} sm={6} md={2.4}>
-            <StatCard icon={FaHome} label="Home Service" value={stats.home} color="success" />
+            <StatCard icon={FaCheckCircle} label="Confirmed" value={stats.confirmed} color="success" />
           </Grid>
           <Grid item xs={12} sm={6} md={2.4}>
-            <StatCard icon={FaEnvelope} label="Mail-in Repairs" value={stats.mail} color="secondary" />
+            <StatCard icon={FaCheck} label="Completed" value={stats.completed} color="info" />
           </Grid>
           <Grid item xs={12} sm={6} md={2.4}>
-            <StatCard icon={FaCalendarAlt} label="Today's Bookings" value={stats.today} color="warning" />
+            <StatCard icon={FaBan} label="Rejected" value={stats.rejected} color="error" />
           </Grid>
         </Grid>
       </Box>
@@ -354,7 +474,7 @@ function BookedRepairsPage() {
               <TextField
                 placeholder="Search by name, email, phone, device, or booking #..."
                 value={filters.search}
-                onChange={(e) => setFilters({ ...filters, search: e.target.value })}
+                onChange={(e) => setFilters({ ...filters, search: e.target.value, page: 1 })}
                 fullWidth
                 size="small"
                 InputProps={{
@@ -373,7 +493,7 @@ function BookedRepairsPage() {
               >
                 Filters
               </Button>
-              {(filters.search || filters.repairType !== 'all' || filters.repairOption !== 'all' || filters.dateRange !== 'all') && (
+              {(filters.search || filters.repairType !== 'all' || filters.repairOption !== 'all' || filters.status !== 'all' || filters.dateRange !== 'all') && (
                 <Button
                   variant="text"
                   color="error"
@@ -390,11 +510,28 @@ function BookedRepairsPage() {
               <Grid container spacing={2} sx={{ mt: 2 }}>
                 <Grid item xs={12} sm={3}>
                   <FormControl fullWidth size="small">
+                    <InputLabel>Status</InputLabel>
+                    <Select
+                      value={filters.status}
+                      label="Status"
+                      onChange={(e) => setFilters({ ...filters, status: e.target.value, page: 1 })}
+                    >
+                      <MenuItem value="all">All Status</MenuItem>
+                      <MenuItem value="pending">Pending</MenuItem>
+                      <MenuItem value="confirmed">Confirmed</MenuItem>
+                      <MenuItem value="completed">Completed</MenuItem>
+                      <MenuItem value="rejected">Rejected</MenuItem>
+                      <MenuItem value="cancelled">Cancelled</MenuItem>
+                    </Select>
+                  </FormControl>
+                </Grid>
+                <Grid item xs={12} sm={3}>
+                  <FormControl fullWidth size="small">
                     <InputLabel>Repair Type</InputLabel>
                     <Select
                       value={filters.repairType}
                       label="Repair Type"
-                      onChange={(e) => setFilters({ ...filters, repairType: e.target.value })}
+                      onChange={(e) => setFilters({ ...filters, repairType: e.target.value, page: 1 })}
                     >
                       <MenuItem value="all">All Types</MenuItem>
                       <MenuItem value="Screen Replacement">Screen Replacement</MenuItem>
@@ -411,7 +548,7 @@ function BookedRepairsPage() {
                     <Select
                       value={filters.repairOption}
                       label="Service Option"
-                      onChange={(e) => setFilters({ ...filters, repairOption: e.target.value })}
+                      onChange={(e) => setFilters({ ...filters, repairOption: e.target.value, page: 1 })}
                     >
                       <MenuItem value="all">All Options</MenuItem>
                       <MenuItem value="clinic">Clinic Visit</MenuItem>
@@ -426,28 +563,13 @@ function BookedRepairsPage() {
                     <Select
                       value={filters.dateRange}
                       label="Date Range"
-                      onChange={(e) => setFilters({ ...filters, dateRange: e.target.value })}
+                      onChange={(e) => setFilters({ ...filters, dateRange: e.target.value, page: 1 })}
                     >
                       <MenuItem value="all">All Dates</MenuItem>
                       <MenuItem value="today">Today</MenuItem>
                       <MenuItem value="tomorrow">Tomorrow</MenuItem>
                       <MenuItem value="thisWeek">This Week</MenuItem>
                       <MenuItem value="thisMonth">This Month</MenuItem>
-                    </Select>
-                  </FormControl>
-                </Grid>
-                <Grid item xs={12} sm={3}>
-                  <FormControl fullWidth size="small">
-                    <InputLabel>Clinic</InputLabel>
-                    <Select
-                      value={filters.clinic}
-                      label="Clinic"
-                      onChange={(e) => setFilters({ ...filters, clinic: e.target.value })}
-                    >
-                      <MenuItem value="all">All Clinics</MenuItem>
-                      <MenuItem value="Downtown Clinic">Downtown Clinic</MenuItem>
-                      <MenuItem value="Uptown Clinic">Uptown Clinic</MenuItem>
-                      <MenuItem value="Westside Clinic">Westside Clinic</MenuItem>
                     </Select>
                   </FormControl>
                 </Grid>
@@ -461,14 +583,14 @@ function BookedRepairsPage() {
               <CircularProgress />
               <Typography sx={{ ml: 2 }}>Loading bookings...</Typography>
             </Box>
-          ) : filteredBookings.length === 0 ? (
+          ) : bookings.length === 0 ? (
             <Box sx={{ textAlign: 'center', py: 8 }}>
               <FaLaptop size={48} color={theme.palette.text.disabled} />
               <Typography variant="h6" sx={{ mt: 2, color: 'text.secondary' }}>
                 No bookings found
               </Typography>
               <Typography variant="body2" color="text.secondary">
-                {filters.search || filters.repairType !== 'all' || filters.repairOption !== 'all' || filters.dateRange !== 'all'
+                {filters.search || filters.repairType !== 'all' || filters.repairOption !== 'all' || filters.status !== 'all' || filters.dateRange !== 'all'
                   ? 'Try adjusting your filters'
                   : 'No repair bookings have been made yet'}
               </Typography>
@@ -482,7 +604,7 @@ function BookedRepairsPage() {
                       <TableCell>Booking #</TableCell>
                       <TableCell>Customer</TableCell>
                       <TableCell>Device</TableCell>
-                      <TableCell>Repair Type</TableCell>
+                      <TableCell>Status</TableCell>
                       <TableCell>Service Option</TableCell>
                       <TableCell>Date & Time</TableCell>
                       <TableCell align="right">Price</TableCell>
@@ -490,7 +612,7 @@ function BookedRepairsPage() {
                     </TableRow>
                   </TableHead>
                   <TableBody>
-                    {filteredBookings.map((booking) => (
+                    {bookings.map((booking) => (
                       <TableRow
                         key={booking._id}
                         hover
@@ -519,7 +641,13 @@ function BookedRepairsPage() {
                           <Typography variant="body2">{booking.deviceName}</Typography>
                         </TableCell>
                         <TableCell>
-                          <Typography variant="body2">{booking.repairType}</Typography>
+                          <Chip
+                            icon={getStatusIcon(booking.status)}
+                            label={booking.status}
+                            size="small"
+                            color={getStatusColor(booking.status)}
+                            variant="filled"
+                          />
                         </TableCell>
                         <TableCell>
                           <Chip
@@ -569,11 +697,18 @@ function BookedRepairsPage() {
                 </Table>
               </TableContainer>
 
-              {/* Table Footer */}
-              <Box sx={{ p: 2, borderTop: '1px solid', borderColor: 'divider' }}>
+              {/* Pagination */}
+              <Box sx={{ p: 3, borderTop: '1px solid', borderColor: 'divider', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <Typography variant="body2" color="text.secondary">
-                  Showing {filteredBookings.length} of {bookings.length} bookings
+                  Showing {((pagination.page - 1) * pagination.limit) + 1} to {Math.min(pagination.page * pagination.limit, pagination.total)} of {pagination.total} bookings
                 </Typography>
+                <Pagination
+                  count={pagination.pages}
+                  page={pagination.page}
+                  onChange={handlePageChange}
+                  color="primary"
+                  shape="rounded"
+                />
               </Box>
             </>
           )}
@@ -586,7 +721,7 @@ function BookedRepairsPage() {
         open={drawerOpen}
         onClose={() => setDrawerOpen(false)}
         PaperProps={{
-          sx: { width: { xs: '100%', sm: 500 } }
+          sx: { width: { xs: '100%', sm: 600 } }
         }}
       >
         {selectedBooking && (
@@ -600,178 +735,451 @@ function BookedRepairsPage() {
               </IconButton>
             </Stack>
 
-            <Stack spacing={3}>
-              {/* Status Badge */}
-              <Box sx={{ display: 'flex', justifyContent: 'center' }}>
-                <Chip
-                  label="Confirmed"
-                  icon={<FaCheckCircle />}
-                  color="success"
-                  sx={{ px: 2, py: 1 }}
-                />
-              </Box>
+            <Tabs value={detailsTab} onChange={(e, v) => setDetailsTab(v)} sx={{ mb: 3 }}>
+              <Tab label="Details" />
+              <Tab label="History" />
+              <Tab label="Email" />
+            </Tabs>
 
-              {/* Booking Info */}
-              <Paper variant="outlined" sx={{ p: 2, borderRadius: 2 }}>
-                <Typography variant="subtitle2" color="primary" gutterBottom>
-                  <FaIdCard style={{ marginRight: 8 }} />
-                  Booking Information
-                </Typography>
-                <Stack spacing={2} sx={{ mt: 1 }}>
-                  <Stack direction="row" justifyContent="space-between">
-                    <Typography variant="body2" color="text.secondary">Booking Number</Typography>
-                    <Typography variant="body2" fontWeight="medium">{selectedBooking.bookingNumber}</Typography>
-                  </Stack>
-                  <Divider />
-                  <Stack direction="row" justifyContent="space-between">
-                    <Typography variant="body2" color="text.secondary">Booking Date</Typography>
-                    <Typography variant="body2">{selectedBooking.bookingDate} at {selectedBooking.bookingTime}</Typography>
-                  </Stack>
-                </Stack>
-              </Paper>
-
-              {/* Customer Info */}
-              <Paper variant="outlined" sx={{ p: 2, borderRadius: 2 }}>
-                <Typography variant="subtitle2" color="primary" gutterBottom>
-                  <FaUser style={{ marginRight: 8 }} />
-                  Customer Information
-                </Typography>
-                <Stack spacing={2} sx={{ mt: 1 }}>
-                  <Stack direction="row" spacing={2} alignItems="center">
-                    <Avatar sx={{ bgcolor: 'primary.light' }}>
-                      {selectedBooking.firstName[0]}{selectedBooking.lastName[0]}
-                    </Avatar>
-                    <Box>
-                      <Typography variant="body2" fontWeight="medium">
-                        {selectedBooking.firstName} {selectedBooking.lastName}
-                      </Typography>
-                      <Stack direction="row" spacing={2} sx={{ mt: 0.5 }}>
-                        <Tooltip title="Email">
-                          <IconButton size="small" color="primary">
-                            <FaEnvelope size={14} />
-                          </IconButton>
-                        </Tooltip>
-                        <Tooltip title="Phone">
-                          <IconButton size="small" color="primary">
-                            <FaPhone size={14} />
-                          </IconButton>
-                        </Tooltip>
-                      </Stack>
-                    </Box>
-                  </Stack>
-                  <Divider />
-                  <Typography variant="body2">{selectedBooking.email}</Typography>
-                  <Typography variant="body2">{selectedBooking.phone}</Typography>
-                </Stack>
-              </Paper>
-
-              {/* Repair Details */}
-              <Paper variant="outlined" sx={{ p: 2, borderRadius: 2 }}>
-                <Typography variant="subtitle2" color="primary" gutterBottom>
-                  <FaWrench style={{ marginRight: 8 }} />
-                  Repair Details
-                </Typography>
-                <Stack spacing={2} sx={{ mt: 1 }}>
-                  <Stack direction="row" justifyContent="space-between">
-                    <Typography variant="body2" color="text.secondary">Device</Typography>
-                    <Typography variant="body2" fontWeight="medium">{selectedBooking.deviceName}</Typography>
-                  </Stack>
-                  <Divider />
-                  <Stack direction="row" justifyContent="space-between">
-                    <Typography variant="body2" color="text.secondary">Repair Type</Typography>
-                    <Chip
-                      label={selectedBooking.repairType}
-                      size="small"
-                      color="primary"
+            {detailsTab === 0 && (
+              <Stack spacing={3}>
+                {/* Status Badge and Actions */}
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <Chip
+                    icon={getStatusIcon(selectedBooking.status)}
+                    label={selectedBooking.status?.toUpperCase()}
+                    color={getStatusColor(selectedBooking.status)}
+                    sx={{ px: 2, py: 1 }}
+                  />
+                  <Stack direction="row" spacing={1}>
+                    <Button
                       variant="outlined"
-                    />
-                  </Stack>
-                  <Divider />
-                  <Stack direction="row" justifyContent="space-between">
-                    <Typography variant="body2" color="text.secondary">Service Option</Typography>
-                    <Chip
-                      icon={getRepairOptionIcon(selectedBooking.repairOption)}
-                      label={selectedBooking.repairOption}
                       size="small"
-                      color={getRepairOptionColor(selectedBooking.repairOption)}
-                    />
+                      startIcon={<FaUndo />}
+                      onClick={() => {
+                        setNewStatus(selectedBooking.status);
+                        setStatusDialogOpen(true);
+                      }}
+                    >
+                      Update Status
+                    </Button>
+                    <Button
+                      variant="contained"
+                      size="small"
+                      startIcon={<FaPaperPlane />}
+                      onClick={() => setEmailDialogOpen(true)}
+                    >
+                      Send Email
+                    </Button>
                   </Stack>
-                  <Divider />
-                  <Stack direction="row" justifyContent="space-between">
-                    <Typography variant="body2" color="text.secondary">Price</Typography>
-                    <Typography variant="h6" color="primary" fontWeight="bold">
-                      ${selectedBooking.price?.toFixed(2)}
-                    </Typography>
-                  </Stack>
-                </Stack>
-              </Paper>
+                </Box>
 
-              {/* Schedule */}
-              <Paper variant="outlined" sx={{ p: 2, borderRadius: 2 }}>
-                <Typography variant="subtitle2" color="primary" gutterBottom>
-                  <FaCalendarAlt style={{ marginRight: 8 }} />
-                  Schedule
-                </Typography>
-                <Stack spacing={2} sx={{ mt: 1 }}>
-                  <Stack direction="row" spacing={2}>
-                    <Box sx={{ textAlign: 'center', minWidth: 60 }}>
-                      <Typography variant="h4" color="primary">
-                        {format(new Date(selectedBooking.date), 'dd')}
-                      </Typography>
-                      <Typography variant="caption" color="text.secondary">
-                        {format(new Date(selectedBooking.date), 'MMM')}
-                      </Typography>
-                    </Box>
-                    <Box>
-                      <Typography variant="body2" fontWeight="medium">
-                        {format(new Date(selectedBooking.date), 'EEEE, MMMM dd, yyyy')}
-                      </Typography>
-                      <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 0.5 }}>
-                        <FaClock size={12} color={theme.palette.text.secondary} />
-                        <Typography variant="body2" color="text.secondary">
-                          {selectedBooking.timeSlot}
-                        </Typography>
-                      </Stack>
-                    </Box>
-                  </Stack>
-                </Stack>
-              </Paper>
-
-              {/* Notes */}
-              {selectedBooking.notes && (
+                {/* Booking Info */}
                 <Paper variant="outlined" sx={{ p: 2, borderRadius: 2 }}>
                   <Typography variant="subtitle2" color="primary" gutterBottom>
-                    <FaNotesMedical style={{ marginRight: 8 }} />
-                    Notes
+                    <FaIdCard style={{ marginRight: 8 }} />
+                    Booking Information
                   </Typography>
-                  <Typography variant="body2" sx={{ mt: 1, p: 1.5, bgcolor: 'grey.50', borderRadius: 1 }}>
-                    {selectedBooking.notes}
-                  </Typography>
+                  <Stack spacing={2} sx={{ mt: 1 }}>
+                    <Stack direction="row" justifyContent="space-between">
+                      <Typography variant="body2" color="text.secondary">Booking Number</Typography>
+                      <Typography variant="body2" fontWeight="medium">{selectedBooking.bookingNumber}</Typography>
+                    </Stack>
+                    <Divider />
+                    <Stack direction="row" justifyContent="space-between">
+                      <Typography variant="body2" color="text.secondary">Booking Date</Typography>
+                      <Typography variant="body2">{selectedBooking.bookingDate} at {selectedBooking.bookingTime}</Typography>
+                    </Stack>
+                  </Stack>
                 </Paper>
-              )}
 
-              {/* Action Buttons */}
-              <Stack direction="row" spacing={2} sx={{ mt: 2 }}>
+                {/* Customer Info */}
+                <Paper variant="outlined" sx={{ p: 2, borderRadius: 2 }}>
+                  <Typography variant="subtitle2" color="primary" gutterBottom>
+                    <FaUser style={{ marginRight: 8 }} />
+                    Customer Information
+                  </Typography>
+                  <Stack spacing={2} sx={{ mt: 1 }}>
+                    <Stack direction="row" spacing={2} alignItems="center">
+                      <Avatar sx={{ bgcolor: 'primary.light' }}>
+                        {selectedBooking.firstName[0]}{selectedBooking.lastName[0]}
+                      </Avatar>
+                      <Box>
+                        <Typography variant="body2" fontWeight="medium">
+                          {selectedBooking.firstName} {selectedBooking.lastName}
+                        </Typography>
+                      </Box>
+                    </Stack>
+                    <Divider />
+                    <Typography variant="body2">{selectedBooking.email}</Typography>
+                    <Typography variant="body2">{selectedBooking.phone}</Typography>
+                  </Stack>
+                </Paper>
+
+                {/* Repair Details */}
+                <Paper variant="outlined" sx={{ p: 2, borderRadius: 2 }}>
+                  <Typography variant="subtitle2" color="primary" gutterBottom>
+                    <FaWrench style={{ marginRight: 8 }} />
+                    Repair Details
+                  </Typography>
+                  <Stack spacing={2} sx={{ mt: 1 }}>
+                    <Stack direction="row" justifyContent="space-between">
+                      <Typography variant="body2" color="text.secondary">Device</Typography>
+                      <Typography variant="body2" fontWeight="medium">{selectedBooking.deviceName}</Typography>
+                    </Stack>
+                    <Divider />
+                    <Stack direction="row" justifyContent="space-between">
+                      <Typography variant="body2" color="text.secondary">Repair Type</Typography>
+                      <Chip
+                        label={selectedBooking.repairType}
+                        size="small"
+                        color="primary"
+                        variant="outlined"
+                      />
+                    </Stack>
+                    <Divider />
+                    <Stack direction="row" justifyContent="space-between">
+                      <Typography variant="body2" color="text.secondary">Service Option</Typography>
+                      <Chip
+                        icon={getRepairOptionIcon(selectedBooking.repairOption)}
+                        label={selectedBooking.repairOption}
+                        size="small"
+                        color={getRepairOptionColor(selectedBooking.repairOption)}
+                      />
+                    </Stack>
+                    <Divider />
+                    <Stack direction="row" justifyContent="space-between">
+                      <Typography variant="body2" color="text.secondary">Price</Typography>
+                      <Typography variant="h6" color="primary" fontWeight="bold">
+                        ${selectedBooking.price?.toFixed(2)}
+                      </Typography>
+                    </Stack>
+                  </Stack>
+                </Paper>
+
+                {/* Schedule */}
+                <Paper variant="outlined" sx={{ p: 2, borderRadius: 2 }}>
+                  <Typography variant="subtitle2" color="primary" gutterBottom>
+                    <FaCalendarAlt style={{ marginRight: 8 }} />
+                    Schedule
+                  </Typography>
+                  <Stack spacing={2} sx={{ mt: 1 }}>
+                    <Stack direction="row" spacing={2}>
+                      <Box sx={{ textAlign: 'center', minWidth: 60 }}>
+                        <Typography variant="h4" color="primary">
+                          {format(new Date(selectedBooking.date), 'dd')}
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          {format(new Date(selectedBooking.date), 'MMM')}
+                        </Typography>
+                      </Box>
+                      <Box>
+                        <Typography variant="body2" fontWeight="medium">
+                          {format(new Date(selectedBooking.date), 'EEEE, MMMM dd, yyyy')}
+                        </Typography>
+                        <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 0.5 }}>
+                          <FaClock size={12} color={theme.palette.text.secondary} />
+                          <Typography variant="body2" color="text.secondary">
+                            {selectedBooking.timeSlot}
+                          </Typography>
+                        </Stack>
+                      </Box>
+                    </Stack>
+                  </Stack>
+                </Paper>
+
+                {/* Location */}
+                {selectedBooking.repairOption === 'clinic' && selectedBooking.clinicDetails && (
+                  <Paper variant="outlined" sx={{ p: 2, borderRadius: 2 }}>
+                    <Typography variant="subtitle2" color="primary" gutterBottom>
+                      <FaMapMarkerAlt style={{ marginRight: 8 }} />
+                      Clinic Location
+                    </Typography>
+                    <Typography variant="body2" fontWeight="medium">
+                      {selectedBooking.clinicDetails.name}
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      {selectedBooking.clinicDetails.address}
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      {selectedBooking.clinicDetails.timing}
+                    </Typography>
+                  </Paper>
+                )}
+
+                {/* Notes */}
+                {selectedBooking.notes && (
+                  <Paper variant="outlined" sx={{ p: 2, borderRadius: 2 }}>
+                    <Typography variant="subtitle2" color="primary" gutterBottom>
+                      <FaNotesMedical style={{ marginRight: 8 }} />
+                      Notes
+                    </Typography>
+                    <Typography variant="body2" sx={{ mt: 1, p: 1.5, bgcolor: 'grey.50', borderRadius: 1 }}>
+                      {selectedBooking.notes}
+                    </Typography>
+                  </Paper>
+                )}
+              </Stack>
+            )}
+
+            {detailsTab === 1 && (
+              <Stack spacing={3}>
+                <Typography variant="subtitle1" fontWeight="bold">
+                  Status History
+                </Typography>
+                {selectedBooking.statusHistory?.length > 0 ? (
+                  selectedBooking.statusHistory.map((history, index) => (
+                    <Paper key={index} variant="outlined" sx={{ p: 2 }}>
+                      <Stack direction="row" justifyContent="space-between" alignItems="center">
+                        <Chip
+                          icon={getStatusIcon(history.status)}
+                          label={history.status}
+                          size="small"
+                          color={getStatusColor(history.status)}
+                        />
+                        <Typography variant="caption" color="text.secondary">
+                          {format(new Date(history.changedAt), 'MMM dd, yyyy hh:mm a')}
+                        </Typography>
+                      </Stack>
+                      {history.note && (
+                        <Typography variant="body2" sx={{ mt: 1 }}>
+                          {history.note}
+                        </Typography>
+                      )}
+                      <Typography variant="caption" color="text.secondary">
+                        By: {history.changedBy}
+                      </Typography>
+                    </Paper>
+                  ))
+                ) : (
+                  <Typography color="text.secondary">No status history available</Typography>
+                )}
+
+                <Divider />
+
+                <Typography variant="subtitle1" fontWeight="bold">
+                  Email History
+                </Typography>
+                {selectedBooking.emailHistory?.length > 0 ? (
+                  selectedBooking.emailHistory.map((email, index) => (
+                    <Paper key={index} variant="outlined" sx={{ p: 2 }}>
+                      <Stack direction="row" justifyContent="space-between" alignItems="center">
+                        <Typography variant="subtitle2">{email.subject}</Typography>
+                        <Chip
+                          label={email.status}
+                          size="small"
+                          color={email.status === 'sent' ? 'success' : 'error'}
+                        />
+                      </Stack>
+                      <Typography variant="caption" color="text.secondary">
+                        {format(new Date(email.sentAt), 'MMM dd, yyyy hh:mm a')}
+                      </Typography>
+                      <Typography variant="body2" sx={{ mt: 1 }}>
+                        {email.body}
+                      </Typography>
+                    </Paper>
+                  ))
+                ) : (
+                  <Typography color="text.secondary">No email history available</Typography>
+                )}
+              </Stack>
+            )}
+
+            {detailsTab === 2 && (
+              <Stack spacing={2}>
+                <Typography variant="body2" color="text.secondary" gutterBottom>
+                  Send email to customer
+                </Typography>
                 <Button
                   variant="contained"
+                  startIcon={<FaPaperPlane />}
+                  onClick={() => setEmailDialogOpen(true)}
                   fullWidth
-                  startIcon={<FaCheckCircle />}
                 >
-                  Confirm Booking
+                  Compose Email
                 </Button>
-                <Button
-                  variant="outlined"
-                  fullWidth
-                  startIcon={<FaExclamationCircle />}
-                  color="warning"
-                >
-                  Reschedule
-                </Button>
+                
+                <Divider />
+                
+                <Typography variant="subtitle2">Quick Actions</Typography>
+                <Stack spacing={1}>
+                  <Button
+                    variant="outlined"
+                    startIcon={<FaCheckCircle />}
+                    onClick={() => {
+                      handleEmailTypeChange('confirmation');
+                      setEmailDialogOpen(true);
+                    }}
+                  >
+                    Send Confirmation
+                  </Button>
+                  <Button
+                    variant="outlined"
+                    startIcon={<FaClock />}
+                    onClick={() => {
+                      handleEmailTypeChange('reminder');
+                      setEmailDialogOpen(true);
+                    }}
+                  >
+                    Send Reminder
+                  </Button>
+                  <Button
+                    variant="outlined"
+                    color="success"
+                    startIcon={<FaCheck />}
+                    onClick={() => {
+                      handleEmailTypeChange('completed');
+                      setEmailDialogOpen(true);
+                    }}
+                  >
+                    Send Completion Notice
+                  </Button>
+                  <Button
+                    variant="outlined"
+                    color="error"
+                    startIcon={<FaBan />}
+                    onClick={() => {
+                      handleEmailTypeChange('rejection');
+                      setEmailDialogOpen(true);
+                    }}
+                  >
+                    Send Rejection
+                  </Button>
+                </Stack>
               </Stack>
-            </Stack>
+            )}
           </Box>
         )}
       </Drawer>
+
+      {/* Email Dialog */}
+      <Dialog open={emailDialogOpen} onClose={() => setEmailDialogOpen(false)} maxWidth="md" fullWidth>
+        <DialogTitle>
+          Send Email to Customer
+          <IconButton
+            onClick={() => setEmailDialogOpen(false)}
+            sx={{ position: 'absolute', right: 8, top: 8 }}
+          >
+            <FaTimes />
+          </IconButton>
+        </DialogTitle>
+        <DialogContent dividers>
+          <Stack spacing={3}>
+            <FormControl fullWidth>
+              <InputLabel>Email Type</InputLabel>
+              <Select
+                value={emailType}
+                label="Email Type"
+                onChange={(e) => handleEmailTypeChange(e.target.value)}
+              >
+                <MenuItem value="confirmation">Confirmation</MenuItem>
+                <MenuItem value="reminder">Reminder</MenuItem>
+                <MenuItem value="rejection">Rejection</MenuItem>
+                <MenuItem value="completed">Completed</MenuItem>
+                <MenuItem value="custom">Custom</MenuItem>
+              </Select>
+            </FormControl>
+
+            <TextField
+              label="Subject"
+              value={emailSubject}
+              onChange={(e) => setEmailSubject(e.target.value)}
+              fullWidth
+              required
+            />
+
+            <Box>
+              <Typography variant="body2" gutterBottom>
+                Message Body
+              </Typography>
+              <TextareaAutosize
+                minRows={8}
+                value={emailBody}
+                onChange={(e) => setEmailBody(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '12px',
+                  borderRadius: '4px',
+                  borderColor: '#ccc',
+                  fontFamily: 'inherit'
+                }}
+              />
+            </Box>
+
+            {selectedBooking && (
+              <Alert severity="info">
+                Sending to: {selectedBooking.firstName} {selectedBooking.lastName} ({selectedBooking.email})
+              </Alert>
+            )}
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setEmailDialogOpen(false)}>Cancel</Button>
+          <Button
+            onClick={sendEmail}
+            variant="contained"
+            disabled={sendingEmail || !emailSubject || !emailBody}
+            startIcon={sendingEmail ? <CircularProgress size={20} /> : <FaPaperPlane />}
+          >
+            {sendingEmail ? 'Sending...' : 'Send Email'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Status Update Dialog */}
+      <Dialog open={statusDialogOpen} onClose={() => setStatusDialogOpen(false)}>
+        <DialogTitle>Update Booking Status</DialogTitle>
+        <DialogContent>
+          <Stack spacing={3} sx={{ mt: 1 }}>
+            <FormControl fullWidth>
+              <InputLabel>New Status</InputLabel>
+              <Select
+                value={newStatus}
+                label="New Status"
+                onChange={(e) => setNewStatus(e.target.value)}
+              >
+                <MenuItem value="pending">Pending</MenuItem>
+                <MenuItem value="confirmed">Confirmed</MenuItem>
+                <MenuItem value="completed">Completed</MenuItem>
+                <MenuItem value="rejected">Rejected</MenuItem>
+                <MenuItem value="cancelled">Cancelled</MenuItem>
+              </Select>
+            </FormControl>
+
+            <TextField
+              label="Note (optional)"
+              value={statusNote}
+              onChange={(e) => setStatusNote(e.target.value)}
+              multiline
+              rows={3}
+              fullWidth
+              placeholder="Add a note about this status change"
+            />
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setStatusDialogOpen(false)}>Cancel</Button>
+          <Button
+            onClick={updateBookingStatus}
+            variant="contained"
+            disabled={updatingStatus || !newStatus}
+            startIcon={updatingStatus ? <CircularProgress size={20} /> : null}
+          >
+            {updatingStatus ? 'Updating...' : 'Update Status'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Snackbar */}
+      <Snackbar
+        open={snackbar.open}
+        autoHideDuration={6000}
+        onClose={() => setSnackbar({ ...snackbar, open: false })}
+      >
+        <Alert severity={snackbar.severity} onClose={() => setSnackbar({ ...snackbar, open: false })}>
+          {snackbar.message}
+        </Alert>
+      </Snackbar>
     </Box>
   );
 }
