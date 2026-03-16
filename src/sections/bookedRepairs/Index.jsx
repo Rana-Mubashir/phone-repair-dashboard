@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { format } from 'date-fns';
+import { format, isToday, isTomorrow, isThisWeek, isThisMonth, parse, parseISO, isValid } from 'date-fns';
 import {
   Box,
   Typography,
@@ -98,6 +98,8 @@ function BookedRepairsPage() {
     repairOption: 'all',
     status: 'all',
     dateRange: 'all',
+    startDate: '',
+    endDate: '',
     clinic: 'all'
   });
   const [showFilters, setShowFilters] = useState(false);
@@ -161,12 +163,25 @@ function BookedRepairsPage() {
 
       const resp = await axios.get(`${import.meta.env.VITE_SERVER_URL}/api/booking?${params}`);
       if (resp.data) {
-        setBookings(resp.data.data || []);
-        setPagination(resp.data.pagination || {
+        console.log("bookings response ",resp.data);
+        
+        // Apply client-side date filtering
+        let filteredData = resp.data.data || [];
+        
+        if (filters.dateRange !== 'all' || filters.startDate || filters.endDate) {
+          filteredData = filterBookingsByDate(filteredData);
+        }
+        
+        setBookings(filteredData);
+        
+        // Update pagination based on filtered data
+        setPagination({
           page: 1,
-          limit: 10,
-          total: resp.data.data?.length || 0,
-          pages: 1
+          limit: pagination.limit,
+          total: filteredData.length,
+          pages: Math.ceil(filteredData.length / pagination.limit),
+          hasNextPage: filteredData.length > pagination.limit,
+          hasPrevPage: false
         });
       }
     } catch (error) {
@@ -175,6 +190,54 @@ function BookedRepairsPage() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const filterBookingsByDate = (bookingsList) => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    return bookingsList.filter(booking => {
+      // Parse the date from the booking (using the 'date' field which is in ISO format)
+      let bookingDate = null;
+      
+      if (booking.date) {
+        bookingDate = parseISO(booking.date);
+      } else if (booking.bookingDate) {
+        // Handle the string format "3/11/2026"
+        const [month, day, year] = booking.bookingDate.split('/').map(Number);
+        bookingDate = new Date(year, month - 1, day);
+      }
+      
+      if (!bookingDate || !isValid(bookingDate)) {
+        return false;
+      }
+
+      bookingDate.setHours(0, 0, 0, 0);
+
+      // Handle custom date range
+      if (filters.startDate && filters.endDate) {
+        const startDate = new Date(filters.startDate);
+        startDate.setHours(0, 0, 0, 0);
+        const endDate = new Date(filters.endDate);
+        endDate.setHours(23, 59, 59, 999);
+        return bookingDate >= startDate && bookingDate <= endDate;
+      }
+
+      // Handle predefined ranges
+      switch (filters.dateRange) {
+        case 'today':
+          return isToday(bookingDate);
+        case 'tomorrow':
+          return isTomorrow(bookingDate);
+        case 'thisWeek':
+          return isThisWeek(bookingDate, { weekStartsOn: 1 });
+        case 'thisMonth':
+          return isThisMonth(bookingDate);
+        case 'all':
+        default:
+          return true;
+      }
+    });
   };
 
   const calculateStats = () => {
@@ -193,8 +256,15 @@ function BookedRepairsPage() {
       if (booking.repairOption === 'home') acc.home++;
       if (booking.repairOption === 'mail') acc.mail++;
       
-      // Today's bookings
-      if (new Date(booking.date).toDateString() === today) acc.today++;
+      // Today's bookings - using the 'date' field
+      if (booking.date) {
+        const bookingDate = new Date(booking.date).toDateString();
+        if (bookingDate === today) acc.today++;
+      } else if (booking.bookingDate) {
+        const [month, day, year] = booking.bookingDate.split('/').map(Number);
+        const bookingDate = new Date(year, month - 1, day).toDateString();
+        if (bookingDate === today) acc.today++;
+      }
       
       return acc;
     }, { total: 0, pending: 0, confirmed: 0, completed: 0, rejected: 0, clinic: 0, home: 0, mail: 0, today: 0 });
@@ -258,9 +328,22 @@ function BookedRepairsPage() {
       repairOption: 'all',
       status: 'all',
       dateRange: 'all',
+      startDate: '',
+      endDate: '',
       clinic: 'all'
     });
     setPagination(prev => ({ ...prev, page: 1 }));
+  };
+
+  const handleDateRangeChange = (e) => {
+    const value = e.target.value;
+    setFilters(prev => ({ 
+      ...prev, 
+      dateRange: value,
+      // Clear custom dates when switching to predefined ranges
+      startDate: value === 'custom' ? prev.startDate : '',
+      endDate: value === 'custom' ? prev.endDate : ''
+    }));
   };
 
   // Email Templates
@@ -337,7 +420,7 @@ Thank you for choosing TechFix Pro!`
         .replace('{bookingNumber}', selectedBooking.bookingNumber)
         .replace('{deviceName}', selectedBooking.deviceName)
         .replace('{repairType}', selectedBooking.repairType)
-        .replace('{date}', selectedBooking.date)
+        .replace('{date}', selectedBooking.date ? format(parseISO(selectedBooking.date), 'MMM dd, yyyy') : selectedBooking.bookingDate)
         .replace('{timeSlot}', selectedBooking.timeSlot)
         .replace('{location}', selectedBooking.repairOption === 'clinic' && selectedBooking.clinicDetails?.name 
           ? selectedBooking.clinicDetails.name 
@@ -418,6 +501,18 @@ Thank you for choosing TechFix Pro!`
     </Card>
   );
 
+  // Format date for display
+  const formatBookingDate = (booking) => {
+    if (booking.date) {
+      return format(parseISO(booking.date), 'MMM dd, yyyy');
+    } else if (booking.bookingDate) {
+      const [month, day, year] = booking.bookingDate.split('/').map(Number);
+      const date = new Date(year, month - 1, day);
+      return format(date, 'MMM dd, yyyy');
+    }
+    return 'N/A';
+  };
+
   return (
     <Box sx={{ minHeight: '100vh', bgcolor: 'background.default' }}>
       {/* Header */}
@@ -493,7 +588,7 @@ Thank you for choosing TechFix Pro!`
               >
                 Filters
               </Button>
-              {(filters.search || filters.repairType !== 'all' || filters.repairOption !== 'all' || filters.status !== 'all' || filters.dateRange !== 'all') && (
+              {(filters.search || filters.repairType !== 'all' || filters.repairOption !== 'all' || filters.status !== 'all' || filters.dateRange !== 'all' || filters.startDate || filters.endDate) && (
                 <Button
                   variant="text"
                   color="error"
@@ -527,23 +622,6 @@ Thank you for choosing TechFix Pro!`
                 </Grid>
                 <Grid item xs={12} sm={3}>
                   <FormControl fullWidth size="small">
-                    <InputLabel>Repair Type</InputLabel>
-                    <Select
-                      value={filters.repairType}
-                      label="Repair Type"
-                      onChange={(e) => setFilters({ ...filters, repairType: e.target.value, page: 1 })}
-                    >
-                      <MenuItem value="all">All Types</MenuItem>
-                      <MenuItem value="Screen Replacement">Screen Replacement</MenuItem>
-                      <MenuItem value="Battery Replacement">Battery Replacement</MenuItem>
-                      <MenuItem value="Water Damage">Water Damage</MenuItem>
-                      <MenuItem value="Software Issue">Software Issue</MenuItem>
-                      <MenuItem value="Other">Other</MenuItem>
-                    </Select>
-                  </FormControl>
-                </Grid>
-                <Grid item xs={12} sm={3}>
-                  <FormControl fullWidth size="small">
                     <InputLabel>Service Option</InputLabel>
                     <Select
                       value={filters.repairOption}
@@ -552,7 +630,6 @@ Thank you for choosing TechFix Pro!`
                     >
                       <MenuItem value="all">All Options</MenuItem>
                       <MenuItem value="clinic">Clinic Visit</MenuItem>
-                      <MenuItem value="home">Home Service</MenuItem>
                       <MenuItem value="mail">Mail-in</MenuItem>
                     </Select>
                   </FormControl>
@@ -563,16 +640,43 @@ Thank you for choosing TechFix Pro!`
                     <Select
                       value={filters.dateRange}
                       label="Date Range"
-                      onChange={(e) => setFilters({ ...filters, dateRange: e.target.value, page: 1 })}
+                      onChange={handleDateRangeChange}
                     >
                       <MenuItem value="all">All Dates</MenuItem>
                       <MenuItem value="today">Today</MenuItem>
                       <MenuItem value="tomorrow">Tomorrow</MenuItem>
                       <MenuItem value="thisWeek">This Week</MenuItem>
                       <MenuItem value="thisMonth">This Month</MenuItem>
+                      <MenuItem value="custom">Custom Range</MenuItem>
                     </Select>
                   </FormControl>
                 </Grid>
+                {filters.dateRange === 'custom' && (
+                  <>
+                    <Grid item xs={12} sm={3}>
+                      <TextField
+                        label="Start Date"
+                        type="date"
+                        value={filters.startDate}
+                        onChange={(e) => setFilters({ ...filters, startDate: e.target.value, page: 1 })}
+                        size="small"
+                        fullWidth
+                        InputLabelProps={{ shrink: true }}
+                      />
+                    </Grid>
+                    <Grid item xs={12} sm={3}>
+                      <TextField
+                        label="End Date"
+                        type="date"
+                        value={filters.endDate}
+                        onChange={(e) => setFilters({ ...filters, endDate: e.target.value, page: 1 })}
+                        size="small"
+                        fullWidth
+                        InputLabelProps={{ shrink: true }}
+                      />
+                    </Grid>
+                  </>
+                )}
               </Grid>
             )}
           </Box>
@@ -590,7 +694,7 @@ Thank you for choosing TechFix Pro!`
                 No bookings found
               </Typography>
               <Typography variant="body2" color="text.secondary">
-                {filters.search || filters.repairType !== 'all' || filters.repairOption !== 'all' || filters.status !== 'all' || filters.dateRange !== 'all'
+                {filters.search || filters.repairType !== 'all' || filters.repairOption !== 'all' || filters.status !== 'all' || filters.dateRange !== 'all' || filters.startDate || filters.endDate
                   ? 'Try adjusting your filters'
                   : 'No repair bookings have been made yet'}
               </Typography>
@@ -612,7 +716,7 @@ Thank you for choosing TechFix Pro!`
                     </TableRow>
                   </TableHead>
                   <TableBody>
-                    {bookings.map((booking) => (
+                    {bookings.slice((pagination.page - 1) * pagination.limit, pagination.page * pagination.limit).map((booking) => (
                       <TableRow
                         key={booking._id}
                         hover
@@ -662,7 +766,7 @@ Thank you for choosing TechFix Pro!`
                           <Stack direction="row" spacing={1} alignItems="center">
                             <FaCalendarAlt size={12} color={theme.palette.text.secondary} />
                             <Typography variant="body2">
-                              {format(new Date(booking.date), 'MMM dd, yyyy')}
+                              {formatBookingDate(booking)}
                             </Typography>
                           </Stack>
                           <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 0.5 }}>
@@ -700,7 +804,7 @@ Thank you for choosing TechFix Pro!`
               {/* Pagination */}
               <Box sx={{ p: 3, borderTop: '1px solid', borderColor: 'divider', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <Typography variant="body2" color="text.secondary">
-                  Showing {((pagination.page - 1) * pagination.limit) + 1} to {Math.min(pagination.page * pagination.limit, pagination.total)} of {pagination.total} bookings
+                  Showing {((pagination.page - 1) * pagination.limit) + 1} to {Math.min(pagination.page * pagination.limit, bookings.length)} of {bookings.length} bookings
                 </Typography>
                 <Pagination
                   count={pagination.pages}
@@ -867,15 +971,17 @@ Thank you for choosing TechFix Pro!`
                     <Stack direction="row" spacing={2}>
                       <Box sx={{ textAlign: 'center', minWidth: 60 }}>
                         <Typography variant="h4" color="primary">
-                          {format(new Date(selectedBooking.date), 'dd')}
+                          {selectedBooking.date ? format(parseISO(selectedBooking.date), 'dd') : 
+                           selectedBooking.bookingDate ? selectedBooking.bookingDate.split('/')[1] : '--'}
                         </Typography>
                         <Typography variant="caption" color="text.secondary">
-                          {format(new Date(selectedBooking.date), 'MMM')}
+                          {selectedBooking.date ? format(parseISO(selectedBooking.date), 'MMM') : 
+                           selectedBooking.bookingDate ? ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][parseInt(selectedBooking.bookingDate.split('/')[0]) - 1] : ''}
                         </Typography>
                       </Box>
                       <Box>
                         <Typography variant="body2" fontWeight="medium">
-                          {format(new Date(selectedBooking.date), 'EEEE, MMMM dd, yyyy')}
+                          {formatBookingDate(selectedBooking)}
                         </Typography>
                         <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 0.5 }}>
                           <FaClock size={12} color={theme.palette.text.secondary} />
