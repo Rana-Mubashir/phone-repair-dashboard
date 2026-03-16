@@ -163,17 +163,17 @@ function BookedRepairsPage() {
 
       const resp = await axios.get(`${import.meta.env.VITE_SERVER_URL}/api/booking?${params}`);
       if (resp.data) {
-        console.log("bookings response ",resp.data);
-        
+        console.log("bookings response ", resp.data);
+
         // Apply client-side date filtering
         let filteredData = resp.data.data || [];
-        
+
         if (filters.dateRange !== 'all' || filters.startDate || filters.endDate) {
           filteredData = filterBookingsByDate(filteredData);
         }
-        
+
         setBookings(filteredData);
-        
+
         // Update pagination based on filtered data
         setPagination({
           page: 1,
@@ -195,11 +195,11 @@ function BookedRepairsPage() {
   const filterBookingsByDate = (bookingsList) => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    
+
     return bookingsList.filter(booking => {
       // Parse the date from the booking (using the 'date' field which is in ISO format)
       let bookingDate = null;
-      
+
       if (booking.date) {
         bookingDate = parseISO(booking.date);
       } else if (booking.bookingDate) {
@@ -207,7 +207,7 @@ function BookedRepairsPage() {
         const [month, day, year] = booking.bookingDate.split('/').map(Number);
         bookingDate = new Date(year, month - 1, day);
       }
-      
+
       if (!bookingDate || !isValid(bookingDate)) {
         return false;
       }
@@ -244,18 +244,18 @@ function BookedRepairsPage() {
     const today = new Date().toDateString();
     const stats = bookings.reduce((acc, booking) => {
       acc.total++;
-      
+
       // Status counts
       if (booking.status === 'pending') acc.pending++;
       else if (booking.status === 'confirmed') acc.confirmed++;
       else if (booking.status === 'completed') acc.completed++;
       else if (booking.status === 'rejected') acc.rejected++;
-      
+
       // Option counts
       if (booking.repairOption === 'clinic') acc.clinic++;
       if (booking.repairOption === 'home') acc.home++;
       if (booking.repairOption === 'mail') acc.mail++;
-      
+
       // Today's bookings - using the 'date' field
       if (booking.date) {
         const bookingDate = new Date(booking.date).toDateString();
@@ -265,10 +265,10 @@ function BookedRepairsPage() {
         const bookingDate = new Date(year, month - 1, day).toDateString();
         if (bookingDate === today) acc.today++;
       }
-      
+
       return acc;
     }, { total: 0, pending: 0, confirmed: 0, completed: 0, rejected: 0, clinic: 0, home: 0, mail: 0, today: 0 });
-    
+
     setStats(stats);
   };
 
@@ -337,8 +337,8 @@ function BookedRepairsPage() {
 
   const handleDateRangeChange = (e) => {
     const value = e.target.value;
-    setFilters(prev => ({ 
-      ...prev, 
+    setFilters(prev => ({
+      ...prev,
       dateRange: value,
       // Clear custom dates when switching to predefined ranges
       startDate: value === 'custom' ? prev.startDate : '',
@@ -422,8 +422,8 @@ Thank you for choosing TechFix Pro!`
         .replace('{repairType}', selectedBooking.repairType)
         .replace('{date}', selectedBooking.date ? format(parseISO(selectedBooking.date), 'MMM dd, yyyy') : selectedBooking.bookingDate)
         .replace('{timeSlot}', selectedBooking.timeSlot)
-        .replace('{location}', selectedBooking.repairOption === 'clinic' && selectedBooking.clinicDetails?.name 
-          ? selectedBooking.clinicDetails.name 
+        .replace('{location}', selectedBooking.repairOption === 'clinic' && selectedBooking.clinicDetails?.name
+          ? selectedBooking.clinicDetails.name
           : selectedBooking.repairOption)
       );
     } else {
@@ -434,21 +434,22 @@ Thank you for choosing TechFix Pro!`
 
   const sendEmail = async () => {
     if (!selectedBooking) return;
-    
+
     setSendingEmail(true);
     try {
-      await axios.post(`${import.meta.env.VITE_SERVER_URL}/api/booking/${selectedBooking._id}/send-email`, {
+      const resp = await axios.post(`${import.meta.env.VITE_SERVER_URL}/api/booking/${selectedBooking._id}/send-email`, {
         type: emailType,
         subject: emailSubject,
         body: emailBody,
         customMessage: emailBody
       });
-      
-      showSnackbar('Email sent successfully', 'success');
-      setEmailDialogOpen(false);
-      
-      // Refresh booking details
-      fetchBookings();
+      console.log("response for email ",resp)
+      if (resp) {
+        showSnackbar('Email sent successfully', 'success');
+        setEmailDialogOpen(false);
+        fetchBookings();
+      }
+
     } catch (error) {
       console.error('Error sending email:', error);
       showSnackbar('Failed to send email', 'error');
@@ -459,20 +460,23 @@ Thank you for choosing TechFix Pro!`
 
   const updateBookingStatus = async () => {
     if (!selectedBooking || !newStatus) return;
-    
+
     setUpdatingStatus(true);
     try {
-      await axios.patch(`${import.meta.env.VITE_SERVER_URL}/api/booking/${selectedBooking._id}/status`, {
+
+      const resp = await axios.put(`${import.meta.env.VITE_SERVER_URL}/api/booking/${selectedBooking._id}`, {
         status: newStatus,
-        note: statusNote
       });
-      
-      showSnackbar(`Booking ${newStatus} successfully`, 'success');
-      setStatusDialogOpen(false);
-      
-      // Refresh booking details
-      fetchBookings();
-      setSelectedBooking(prev => ({ ...prev, status: newStatus }));
+
+      console.log("response for status changed", resp)
+
+      if (resp) {
+        showSnackbar(`Booking ${newStatus} successfully`, 'success');
+        setStatusDialogOpen(false);
+        await fetchBookings();
+        setSelectedBooking(prev => ({ ...prev, status: newStatus }));
+      }
+
     } catch (error) {
       console.error('Error updating status:', error);
       showSnackbar('Failed to update status', 'error');
@@ -861,7 +865,7 @@ Thank you for choosing TechFix Pro!`
                       size="small"
                       startIcon={<FaUndo />}
                       onClick={() => {
-                        setNewStatus(selectedBooking.status);
+                        // setNewStatus(selectedBooking.status);
                         setStatusDialogOpen(true);
                       }}
                     >
@@ -971,12 +975,12 @@ Thank you for choosing TechFix Pro!`
                     <Stack direction="row" spacing={2}>
                       <Box sx={{ textAlign: 'center', minWidth: 60 }}>
                         <Typography variant="h4" color="primary">
-                          {selectedBooking.date ? format(parseISO(selectedBooking.date), 'dd') : 
-                           selectedBooking.bookingDate ? selectedBooking.bookingDate.split('/')[1] : '--'}
+                          {selectedBooking.date ? format(parseISO(selectedBooking.date), 'dd') :
+                            selectedBooking.bookingDate ? selectedBooking.bookingDate.split('/')[1] : '--'}
                         </Typography>
                         <Typography variant="caption" color="text.secondary">
-                          {selectedBooking.date ? format(parseISO(selectedBooking.date), 'MMM') : 
-                           selectedBooking.bookingDate ? ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][parseInt(selectedBooking.bookingDate.split('/')[0]) - 1] : ''}
+                          {selectedBooking.date ? format(parseISO(selectedBooking.date), 'MMM') :
+                            selectedBooking.bookingDate ? ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][parseInt(selectedBooking.bookingDate.split('/')[0]) - 1] : ''}
                         </Typography>
                       </Box>
                       <Box>
@@ -1104,9 +1108,9 @@ Thank you for choosing TechFix Pro!`
                 >
                   Compose Email
                 </Button>
-                
+
                 <Divider />
-                
+
                 <Typography variant="subtitle2">Quick Actions</Typography>
                 <Stack spacing={1}>
                   <Button
