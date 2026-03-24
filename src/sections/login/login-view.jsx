@@ -20,21 +20,43 @@ import { bgGradient } from 'src/theme/css';
 
 import Logo from 'src/components/logo';
 import Iconify from 'src/components/iconify';
+import axios from 'axios';
+import { toast } from 'react-toastify';
+import { useNavigate } from 'react-router-dom';
 
 // ----------------------------------------------------------------------
 
 export default function LoginView() {
   const theme = useTheme();
 
-  const router = useRouter();
+  const navigate = useNavigate()
 
   const { register, handleSubmit, formState: { errors } } = useForm();
 
+  const [loading, setLoading] = useState(false)
+
   const [showPassword, setShowPassword] = useState(false);
 
-  const handleClick = (data) => {
-    localStorage.setItem('userData', JSON.stringify(data));
-    router.push('/dashboard');
+  const handleClick = async (data) => {
+    setLoading(true)
+    try {
+
+      const resp = await axios.post(`${import.meta.env.VITE_SERVER_URL}/api/user/login`, data)
+
+      if (resp) {
+        toast.success(resp?.data?.message || "User Login Sucessfully")
+        localStorage.setItem('userData', JSON.stringify(resp?.data?.user));
+        console.log("resp for login", resp)
+        navigate('/dashboard')
+      }
+
+    } catch (error) {
+      console.log("error in get login", error)
+      toast.error(error?.response?.data?.message || "Something went wrong ,try again")
+    }
+    finally {
+      setLoading(false)
+    }
   };
 
   const renderForm = (
@@ -66,12 +88,6 @@ export default function LoginView() {
         />
       </Stack>
 
-      <Stack direction="row" alignItems="center" justifyContent="flex-end" sx={{ my: 3 }}>
-        <Link variant="subtitle2" underline="hover">
-          Forgot password?
-        </Link>
-      </Stack>
-
       <LoadingButton
         fullWidth
         size="large"
@@ -80,7 +96,7 @@ export default function LoginView() {
         color="inherit"
         onClick={handleSubmit(handleClick)}
       >
-        Login
+        {loading ? 'Logging in...' : 'Login'}
       </LoadingButton>
     </>
   );

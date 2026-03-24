@@ -845,7 +845,6 @@ Thank you for choosing TechFix Pro!`
 
             <Tabs value={detailsTab} onChange={(e, v) => setDetailsTab(v)} sx={{ mb: 3 }}>
               <Tab label="Details" />
-              <Tab label="History" />
               <Tab label="Email" />
             </Tabs>
 
@@ -1032,7 +1031,7 @@ Thank you for choosing TechFix Pro!`
               </Stack>
             )}
 
-            {detailsTab === 1 && (
+            {/* {detailsTab === 1 && (
               <Stack spacing={3}>
                 <Typography variant="subtitle1" fontWeight="bold">
                   Status History
@@ -1093,9 +1092,9 @@ Thank you for choosing TechFix Pro!`
                   <Typography color="text.secondary">No email history available</Typography>
                 )}
               </Stack>
-            )}
+            )} */}
 
-            {detailsTab === 2 && (
+            {detailsTab === 1 && (
               <Stack spacing={2}>
                 <Typography variant="body2" color="text.secondary" gutterBottom>
                   Send email to customer
