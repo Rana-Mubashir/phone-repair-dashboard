@@ -24,6 +24,10 @@ const navConfig = [
         title: 'Repair Options',
         path: '/repair-options',
       },
+      {
+        title: 'Clients Chat',
+        path: '/clients-chat',
+      },
     ],
   },
 
@@ -61,6 +65,7 @@ const navConfig = [
     ],
   },
 ];
+
 
 
 export default navConfig;
