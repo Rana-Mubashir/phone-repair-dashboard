@@ -178,7 +178,7 @@ const ChatSidebar = ({
                         fontSize: '0.9rem',
                       }}
                     >
-                      {user.avatar}
+                      {user.avatar || "U"}
                     </Avatar>
                   </Badge>
                 </ListItemAvatar>
@@ -200,7 +200,7 @@ const ChatSidebar = ({
                           color: user.unread > 0 ? theme.palette.text.primary : 'inherit',
                         }}
                       >
-                        {user.name}
+                        {user.chatId}
                       </Typography>
                       {user.isStarred && (
                         <IoStar size={14} color="#ffc107" />

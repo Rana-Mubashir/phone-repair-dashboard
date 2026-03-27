@@ -1,4 +1,3 @@
-
 import { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Box,
@@ -10,7 +9,9 @@ import {
   useMediaQuery,
   IconButton,
   Tooltip,
-  Typography
+  Typography,
+  CircularProgress,
+  Alert,
 } from '@mui/material';
 import {
   IoClose,
@@ -19,126 +20,13 @@ import {
   IoStarOutline,
   IoArchive,
   IoBan,
+  IoRefresh,
 } from 'react-icons/io5';
-// import { getRandomAutoResponse } from '@/utils/chatHelpers';
 import ChatSidebar from './chatSidebar';
 import ChatHeader from './chatHeader';
 import ChatMessages from './chatMessages';
 import ChatInput from './chatInput';
-
-// Mock data for demonstration
-const mockUsers = [
-  {
-    id: 1,
-    name: 'John Doe',
-    email: 'john@example.com',
-    avatar: 'JD',
-    lastMessage: 'I need help with my account',
-    timestamp: new Date(2024, 2, 15, 14, 30),
-    unread: 2,
-    status: 'online',
-    isStarred: true,
-    isBlocked: false,
-    isArchived: false,
-    conversation: [
-      {
-        id: 1,
-        text: 'Hi, I need help with my account',
-        sender: 'user',
-        timestamp: new Date(2024, 2, 15, 14, 30),
-        read: false,
-      },
-      {
-        id: 2,
-        text: "Hello! I'd be happy to help. What seems to be the issue?",
-        sender: 'admin',
-        timestamp: new Date(2024, 2, 15, 14, 32),
-        read: true,
-      },
-    ],
-    notes: 'VIP customer - handle with priority',
-  },
-  {
-    id: 2,
-    name: 'Sarah Smith',
-    email: 'sarah@example.com',
-    avatar: 'SS',
-    lastMessage: 'When will my order arrive?',
-    timestamp: new Date(2024, 2, 15, 13, 15),
-    unread: 0,
-    status: 'offline',
-    isStarred: false,
-    isBlocked: false,
-    isArchived: false,
-    conversation: [
-      {
-        id: 1,
-        text: 'When will my order arrive?',
-        sender: 'user',
-        timestamp: new Date(2024, 2, 15, 13, 15),
-        read: true,
-      },
-    ],
-  },
-  {
-    id: 3,
-    name: 'Mike Johnson',
-    email: 'mike@example.com',
-    avatar: 'MJ',
-    lastMessage: 'Can I get a refund?',
-    timestamp: new Date(2024, 2, 15, 11, 45),
-    unread: 1,
-    status: 'online',
-    isStarred: false,
-    isBlocked: false,
-    isArchived: false,
-    conversation: [
-      {
-        id: 1,
-        text: 'Can I get a refund for my recent purchase?',
-        sender: 'user',
-        timestamp: new Date(2024, 2, 15, 11, 45),
-        read: false,
-      },
-    ],
-  },
-  {
-    id: 4,
-    name: 'Emma Wilson',
-    email: 'emma@example.com',
-    avatar: 'EW',
-    lastMessage: 'Thank you for your help!',
-    timestamp: new Date(2024, 2, 15, 10, 20),
-    unread: 0,
-    status: 'offline',
-    isStarred: false,
-    isBlocked: false,
-    isArchived: false,
-    conversation: [
-      {
-        id: 1,
-        text: 'Can you help me reset my password?',
-        sender: 'user',
-        timestamp: new Date(2024, 2, 15, 9, 45),
-        read: true,
-      },
-      {
-        id: 2,
-        text: 'Of course! Let me send you a reset link.',
-        sender: 'admin',
-        timestamp: new Date(2024, 2, 15, 9, 50),
-        read: true,
-      },
-      {
-        id: 3,
-        text: 'Thank you for your help!',
-        sender: 'user',
-        timestamp: new Date(2024, 2, 15, 10, 20),
-        read: true,
-      },
-    ],
-  },
-];
+import axios from 'axios';
 
 const ClientChatPage = () => {
   const theme = useTheme();
@@ -146,7 +34,7 @@ const ClientChatPage = () => {
   const isTablet = useMediaQuery(theme.breakpoints.down('lg'));
 
   // State management
-  const [users, setUsers] = useState(mockUsers);
+  const [users, setUsers] = useState([]);
   const [selectedUser, setSelectedUser] = useState(null);
   const [newMessage, setNewMessage] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
@@ -154,28 +42,91 @@ const ClientChatPage = () => {
   const [showDetails, setShowDetails] = useState(false);
   const [isTyping, setIsTyping] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [isFetching, setIsFetching] = useState(true);
+  const [error, setError] = useState(null);
   const [anchorEl, setAnchorEl] = useState(null);
   const [contextMenuUser, setContextMenuUser] = useState(null);
 
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
 
-  // Filter users based on search
-  const filteredUsers = users.filter(
-    (user) =>
-      !user.isArchived &&
-      (user.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        user.email.toLowerCase().includes(searchQuery.toLowerCase()))
-  );
+  // Fetch chats on component mount
+  useEffect(() => {
+    fetchChats();
+  }, []);
+
+  const fetchChats = async () => {
+    try {
+      setIsFetching(true);
+      setError(null);
+      
+      const resp = await axios.get(`${import.meta.env.VITE_SERVER_URL}/api/chat`);
+      
+      if (resp?.data?.chats) {
+        // Ensure we're setting an array, even if empty
+        const chatsData = Array.isArray(resp.data.chats) ? resp.data.chats : [];
+        
+        // Add default properties if missing from API response
+        const formattedChats = chatsData.map(chat => ({
+          ...chat,
+          isStarred: chat.isStarred || false,
+          isBlocked: chat.isBlocked || false,
+          isArchived: chat.isArchived || false,
+          unread: chat.unread || 0,
+          status: chat.status || 'offline',
+          conversation: chat.conversation || [],
+          lastMessage: chat.lastMessage || '',
+          timestamp: chat.timestamp ? new Date(chat.timestamp) : new Date(),
+          avatar: chat.avatar || getInitials(chat.name),
+        }));
+        
+        setUsers(formattedChats);
+        console.log("Chats loaded:", formattedChats.length);
+      } else {
+        setUsers([]);
+      }
+    } catch (error) {
+      console.log("Error in getting chats:", error);
+      setError(error.message || "Failed to load conversations");
+      setUsers([]);
+    } finally {
+      setIsFetching(false);
+    }
+  };
+
+  // Helper function to get initials
+  const getInitials = (name) => {
+    if (!name) return '??';
+    return name
+      .split(' ')
+      .map(word => word[0])
+      .join('')
+      .toUpperCase()
+      .slice(0, 2);
+  };
+
+  // Filter users based on search and archived status
+  const filteredUsers = users.filter((user) => {
+    if (!user) return false;
+    if (user.isArchived) return false;
+    
+    const searchLower = searchQuery.toLowerCase();
+    return (
+      (user.name?.toLowerCase() || '').includes(searchLower) ||
+      (user.email?.toLowerCase() || '').includes(searchLower)
+    );
+  });
 
   // Auto-scroll to bottom when messages change
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    if (messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
   }, [selectedUser?.conversation]);
 
   // Focus input when user is selected
   useEffect(() => {
-    if (selectedUser && inputRef.current && !isMobile) {
+    if (selectedUser && inputRef.current && !isMobile && !selectedUser.isBlocked) {
       inputRef.current.focus();
     }
   }, [selectedUser, isMobile]);
@@ -189,7 +140,7 @@ const ClientChatPage = () => {
 
   // Send message handler
   const handleSendMessage = useCallback(() => {
-    if (!newMessage.trim() || !selectedUser || isLoading) return;
+    if (!newMessage?.trim() || !selectedUser || isLoading || selectedUser.isBlocked) return;
 
     setIsLoading(true);
 
@@ -203,10 +154,10 @@ const ClientChatPage = () => {
 
     // Update users list with new message
     const updatedUsers = users.map((user) => {
-      if (user.id === selectedUser.id) {
+      if (user?.id === selectedUser.id) {
         return {
           ...user,
-          conversation: [...user.conversation, newMsg],
+          conversation: [...(user?.conversation || []), newMsg],
           lastMessage: newMessage,
           timestamp: new Date(),
         };
@@ -219,7 +170,7 @@ const ClientChatPage = () => {
       prev
         ? {
             ...prev,
-            conversation: [...prev.conversation, newMsg],
+            conversation: [...(prev.conversation || []), newMsg],
             lastMessage: newMessage,
             timestamp: new Date(),
           }
@@ -234,20 +185,20 @@ const ClientChatPage = () => {
       setTimeout(() => {
         const userResponse = {
           id: Date.now() + 1,
-          text: "hello",
+          text: "Thank you for your message. I'll get back to you shortly.",
           sender: 'user',
           timestamp: new Date(),
           read: false,
         };
 
         const updatedUsersWithResponse = updatedUsers.map((user) => {
-          if (user.id === selectedUser.id) {
+          if (user?.id === selectedUser.id) {
             return {
               ...user,
-              conversation: [...user.conversation, userResponse],
+              conversation: [...(user?.conversation || []), userResponse],
               lastMessage: userResponse.text,
               timestamp: new Date(),
-              unread: user.unread + 1,
+              unread: (user?.unread || 0) + 1,
             };
           }
           return user;
@@ -258,10 +209,10 @@ const ClientChatPage = () => {
           prev
             ? {
                 ...prev,
-                conversation: [...prev.conversation, userResponse],
+                conversation: [...(prev.conversation || []), userResponse],
                 lastMessage: userResponse.text,
                 timestamp: new Date(),
-                unread: prev.unread + 1,
+                unread: (prev.unread || 0) + 1,
               }
             : null
         );
@@ -286,7 +237,7 @@ const ClientChatPage = () => {
   const markAsRead = useCallback((userId) => {
     setUsers((prevUsers) =>
       prevUsers.map((user) =>
-        user.id === userId ? { ...user, unread: 0 } : user
+        user?.id === userId ? { ...user, unread: 0 } : user
       )
     );
   }, []);
@@ -295,7 +246,7 @@ const ClientChatPage = () => {
   const toggleStarUser = useCallback((userId) => {
     setUsers((prevUsers) =>
       prevUsers.map((user) =>
-        user.id === userId ? { ...user, isStarred: !user.isStarred } : user
+        user?.id === userId ? { ...user, isStarred: !user?.isStarred } : user
       )
     );
     setSelectedUser((prev) =>
@@ -307,7 +258,7 @@ const ClientChatPage = () => {
   const archiveConversation = useCallback((userId) => {
     setUsers((prevUsers) =>
       prevUsers.map((user) =>
-        user.id === userId ? { ...user, isArchived: true } : user
+        user?.id === userId ? { ...user, isArchived: true } : user
       )
     );
     if (selectedUser?.id === userId) {
@@ -320,7 +271,7 @@ const ClientChatPage = () => {
   const blockUser = useCallback((userId) => {
     setUsers((prevUsers) =>
       prevUsers.map((user) =>
-        user.id === userId ? { ...user, isBlocked: true } : user
+        user?.id === userId ? { ...user, isBlocked: true } : user
       )
     );
     if (selectedUser?.id === userId) {
@@ -333,7 +284,7 @@ const ClientChatPage = () => {
   const markAsUnread = useCallback((userId) => {
     setUsers((prevUsers) =>
       prevUsers.map((user) =>
-        user.id === userId ? { ...user, unread: Math.max(user.unread, 1) } : user
+        user?.id === userId ? { ...user, unread: Math.max(user?.unread || 0, 1) } : user
       )
     );
     setAnchorEl(null);
@@ -350,6 +301,60 @@ const ClientChatPage = () => {
   const handleMenuClose = () => {
     setAnchorEl(null);
   };
+
+  // Refresh handler
+  const handleRefresh = useCallback(() => {
+    fetchChats();
+  }, []);
+
+  // Loading state
+  if (isFetching) {
+    return (
+      <Box
+        sx={{
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          height: 'calc(100vh - 64px)',
+          gap: 2,
+        }}
+      >
+        <CircularProgress />
+        <Typography variant="body2" color="text.secondary">
+          Loading conversations...
+        </Typography>
+      </Box>
+    );
+  }
+
+  // Error state
+  if (error) {
+    return (
+      <Box
+        sx={{
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          height: 'calc(100vh - 64px)',
+          gap: 2,
+          p: 3,
+        }}
+      >
+        <Alert severity="error" sx={{ maxWidth: 500 }}>
+          {error}
+        </Alert>
+        <Button
+          variant="contained"
+          startIcon={<IoRefresh />}
+          onClick={handleRefresh}
+        >
+          Retry
+        </Button>
+      </Box>
+    );
+  }
 
   return (
     <Box
@@ -391,6 +396,7 @@ const ClientChatPage = () => {
           onSearchChange={setSearchQuery}
           onMenuOpen={handleMenuOpen}
           onToggleStar={toggleStarUser}
+          isLoading={isFetching}
         />
       </Drawer>
 
@@ -417,6 +423,7 @@ const ClientChatPage = () => {
           onSearchChange={setSearchQuery}
           onMenuOpen={handleMenuOpen}
           onToggleStar={toggleStarUser}
+          isLoading={isFetching}
         />
       </Box>
 
@@ -438,14 +445,11 @@ const ClientChatPage = () => {
               onShowDetails={setShowDetails}
               onMenuOpen={(e) => handleMenuOpen(e, selectedUser)}
               onToggleStar={toggleStarUser}
-              onRefresh={() => {
-                // Refresh handler can be extended for API calls
-                console.log('[v0] Refreshing conversation for user:', selectedUser.name);
-              }}
+              onRefresh={handleRefresh}
             />
 
             <ChatMessages
-              messages={selectedUser.conversation}
+              messages={selectedUser?.conversation || []}
               isTyping={isTyping}
               messagesEndRef={messagesEndRef}
             />
@@ -456,10 +460,10 @@ const ClientChatPage = () => {
               onChange={setNewMessage}
               onSend={handleSendMessage}
               onKeyPress={handleKeyPress}
-              disabled={selectedUser.isBlocked}
+              disabled={selectedUser?.isBlocked || isLoading}
               isLoading={isLoading}
               placeholder={
-                selectedUser.isBlocked
+                selectedUser?.isBlocked
                   ? 'This user is blocked'
                   : 'Type your message... (Shift+Enter for new line)'
               }
@@ -488,10 +492,12 @@ const ClientChatPage = () => {
             </Box>
             <Box>
               <Typography variant="h6" color="text.secondary" gutterBottom>
-                Select a conversation to start
+                {users.length === 0 ? 'No conversations yet' : 'Select a conversation to start'}
               </Typography>
               <Typography variant="body2" color="text.secondary">
-                Choose a user from the sidebar to view and respond to messages
+                {users.length === 0
+                  ? 'New conversations will appear here when users message you'
+                  : 'Choose a user from the sidebar to view and respond to messages'}
               </Typography>
             </Box>
           </Box>
