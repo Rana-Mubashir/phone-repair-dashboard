@@ -12,6 +12,7 @@ import {
   Typography,
   CircularProgress,
   Alert,
+  Button,
 } from '@mui/material';
 import {
   IoClose,
@@ -27,13 +28,13 @@ import ChatHeader from './chatHeader';
 import ChatMessages from './chatMessages';
 import ChatInput from './chatInput';
 import axios from 'axios';
+import { io } from "socket.io-client";
 
 const ClientChatPage = () => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const isTablet = useMediaQuery(theme.breakpoints.down('lg'));
 
-  // State management
   const [users, setUsers] = useState([]);
   const [selectedUser, setSelectedUser] = useState(null);
   const [newMessage, setNewMessage] = useState('');
@@ -46,11 +47,130 @@ const ClientChatPage = () => {
   const [error, setError] = useState(null);
   const [anchorEl, setAnchorEl] = useState(null);
   const [contextMenuUser, setContextMenuUser] = useState(null);
+  const [socketConnected, setSocketConnected] = useState(false);
 
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
+  const socketRef = useRef(null);
 
-  // Fetch chats on component mount
+  useEffect(() => {
+
+   socketRef.current.on("connect", () => {
+      console.log("Socket connected");
+      socketRef.current.emit("join", sessionId);
+    });
+    
+    // Socket connection events
+    socketRef.current.on("connect", () => {
+      console.log("Admin socket connected:", socketRef.current.id);
+      setSocketConnected(true);
+    });
+
+    socketRef.current.on("disconnect", () => {
+      console.log("Admin socket disconnected");
+      setSocketConnected(false);
+    });
+
+    socketRef.current.on("connect_error", (error) => {
+      console.error("Socket connection error:", error);
+      setSocketConnected(false);
+    });
+
+    // IMPORTANT: Listen for 'receive_message' event (same as user side)
+    // This is the event that will be emitted when user sends a message
+    socketRef.current.on("receive_message", (data) => {
+      console.log("Admin received message via socket:", data);
+      
+      // Update users list with new message
+      setUsers((prevUsers) => {
+        const existingUserIndex = prevUsers.findIndex(
+          user => user.sessionId === data.sessionId
+        );
+
+        const newMessageObj = {
+          _id: Date.now(),
+          message: data.message,
+          role: data.role, // This should be 'user' for messages from users
+          timestamp: data.timestamp || new Date(),
+          sessionId: data.sessionId
+        };
+
+        if (existingUserIndex !== -1) {
+          // Update existing user
+          const updatedUsers = [...prevUsers];
+          const user = updatedUsers[existingUserIndex];
+          
+          updatedUsers[existingUserIndex] = {
+            ...user,
+            conversation: [...(user.conversation || []), newMessageObj],
+            lastMessage: data.message,
+            timestamp: new Date(),
+            // Increment unread count if not the selected user
+            unread: selectedUser?.sessionId === data.sessionId ? 0 : (user.unread || 0) + 1
+          };
+          
+          return updatedUsers;
+        } else {
+          // Add new user to the list
+          const newUser = {
+            _id: data.sessionId,
+            sessionId: data.sessionId,
+            name: `User ${data.sessionId.slice(0, 8)}`,
+            email: `user_${data.sessionId.slice(0, 8)}@example.com`,
+            conversation: [newMessageObj],
+            lastMessage: data.message,
+            timestamp: new Date(),
+            unread: selectedUser?.sessionId === data.sessionId ? 0 : 1,
+            isStarred: false,
+            isBlocked: false,
+            isArchived: false,
+            status: 'online',
+            avatar: getInitials(`User ${data.sessionId.slice(0, 8)}`)
+          };
+          
+          return [newUser, ...prevUsers];
+        }
+      });
+
+      // Update selected user if it's the current conversation
+      if (selectedUser?.sessionId === data.sessionId) {
+        setSelectedUser((prev) => ({
+          ...prev,
+          conversation: [...(prev.conversation || []), {
+            _id: Date.now(),
+            message: data.message,
+            role: data.role,
+            timestamp: data.timestamp || new Date()
+          }],
+          lastMessage: data.message,
+          timestamp: new Date()
+        }));
+        
+        // Mark as read immediately if it's the selected user
+        markAsRead(data.sessionId);
+      }
+    });
+
+    // Listen for typing indicators from users (optional)
+    // socketRef.current.on("user_typing", (data) => {
+    //   console.log("User typing:", data);
+    //   if (selectedUser?.sessionId === data.sessionId) {
+    //     setIsTyping(data.isTyping);
+    //     // Auto-clear typing indicator after 2 seconds
+    //     setTimeout(() => {
+    //       setIsTyping(false);
+    //     }, 2000);
+    //   }
+    // });
+
+    // Cleanup on unmount
+    return () => {
+      if (socketRef.current) {
+        socketRef.current.disconnect();
+      }
+    };
+  }, [selectedUser]); 
+
   useEffect(() => {
     fetchChats();
   }, []);
@@ -59,27 +179,28 @@ const ClientChatPage = () => {
     try {
       setIsFetching(true);
       setError(null);
-      
+
       const resp = await axios.get(`${import.meta.env.VITE_SERVER_URL}/api/chat`);
+      console.log("resp for chats", resp);
       
       if (resp?.data?.chats) {
-        // Ensure we're setting an array, even if empty
         const chatsData = Array.isArray(resp.data.chats) ? resp.data.chats : [];
-        
-        // Add default properties if missing from API response
+
         const formattedChats = chatsData.map(chat => ({
           ...chat,
+          _id: chat._id || chat.sessionId,
+          sessionId: chat.sessionId,
           isStarred: chat.isStarred || false,
           isBlocked: chat.isBlocked || false,
           isArchived: chat.isArchived || false,
           unread: chat.unread || 0,
           status: chat.status || 'offline',
-          conversation: chat.conversation || [],
-          lastMessage: chat.lastMessage || '',
+          conversation: chat.messages || [],
+          lastMessage: chat.messages?.[chat.messages.length - 1]?.message || '',
           timestamp: chat.timestamp ? new Date(chat.timestamp) : new Date(),
-          avatar: chat.avatar || getInitials(chat.name),
+          avatar: chat.avatar || getInitials(chat.name || `User ${chat.sessionId?.slice(0, 8)}`),
         }));
-        
+
         setUsers(formattedChats);
         console.log("Chats loaded:", formattedChats.length);
       } else {
@@ -94,7 +215,6 @@ const ClientChatPage = () => {
     }
   };
 
-  // Helper function to get initials
   const getInitials = (name) => {
     if (!name) return '??';
     return name
@@ -105,124 +225,119 @@ const ClientChatPage = () => {
       .slice(0, 2);
   };
 
-  // Filter users based on search and archived status
   const filteredUsers = users.filter((user) => {
     if (!user) return false;
     if (user.isArchived) return false;
-    
+
     const searchLower = searchQuery.toLowerCase();
     return (
       (user.name?.toLowerCase() || '').includes(searchLower) ||
-      (user.email?.toLowerCase() || '').includes(searchLower)
+      (user.email?.toLowerCase() || '').includes(searchLower) ||
+      (user.sessionId?.toLowerCase() || '').includes(searchLower)
     );
   });
 
-  // Auto-scroll to bottom when messages change
   useEffect(() => {
     if (messagesEndRef.current) {
       messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
     }
   }, [selectedUser?.conversation]);
 
-  // Focus input when user is selected
   useEffect(() => {
     if (selectedUser && inputRef.current && !isMobile && !selectedUser.isBlocked) {
       inputRef.current.focus();
     }
   }, [selectedUser, isMobile]);
 
-  // Mark messages as read when conversation is opened
   useEffect(() => {
     if (selectedUser && selectedUser.unread > 0) {
-      markAsRead(selectedUser.id);
+      markAsRead(selectedUser.sessionId);
     }
-  }, [selectedUser?.id]);
+  }, [selectedUser?.sessionId]);
 
-  // Send message handler
-  const handleSendMessage = useCallback(() => {
+  const handleSendMessage = useCallback(async () => {
     if (!newMessage?.trim() || !selectedUser || isLoading || selectedUser.isBlocked) return;
 
     setIsLoading(true);
 
+    const messageText = newMessage.trim();
     const newMsg = {
-      id: Date.now(),
-      text: newMessage,
-      sender: 'admin',
-      timestamp: new Date(),
-      read: true,
+      message: messageText,
+      role: 'admin',
+      sessionId: selectedUser.sessionId,
+      timestamp: new Date()
     };
 
-    // Update users list with new message
-    const updatedUsers = users.map((user) => {
-      if (user?.id === selectedUser.id) {
-        return {
-          ...user,
-          conversation: [...(user?.conversation || []), newMsg],
-          lastMessage: newMessage,
+    try {
+      const resp = await axios.post(`${import.meta.env.VITE_SERVER_URL}/api/chat`, newMsg);
+      console.log("response for send message", resp);
+      
+      if (resp.data) {
+        if (socketRef.current && socketConnected) {
+          socketRef.current.emit("send_message", {
+            sessionId: selectedUser.sessionId,
+            message: messageText,
+            role: 'admin',
+            timestamp: new Date()
+          });
+          console.log("Message emitted via socket to user");
+        } else {
+          console.warn("Socket not connected, message saved to database only");
+        }
+
+        const updatedMessage = {
+          _id: resp.data.message?._id || Date.now(),
+          message: messageText,
+          role: 'admin',
           timestamp: new Date(),
-        };
-      }
-      return user;
-    });
-
-    setUsers(updatedUsers);
-    setSelectedUser((prev) =>
-      prev
-        ? {
-            ...prev,
-            conversation: [...(prev.conversation || []), newMsg],
-            lastMessage: newMessage,
-            timestamp: new Date(),
-          }
-        : null
-    );
-    setNewMessage('');
-
-    // Simulate auto-response after delay
-    setTimeout(() => {
-      setIsTyping(true);
-
-      setTimeout(() => {
-        const userResponse = {
-          id: Date.now() + 1,
-          text: "Thank you for your message. I'll get back to you shortly.",
-          sender: 'user',
-          timestamp: new Date(),
-          read: false,
+          sessionId: selectedUser.sessionId
         };
 
-        const updatedUsersWithResponse = updatedUsers.map((user) => {
-          if (user?.id === selectedUser.id) {
-            return {
-              ...user,
-              conversation: [...(user?.conversation || []), userResponse],
-              lastMessage: userResponse.text,
-              timestamp: new Date(),
-              unread: (user?.unread || 0) + 1,
-            };
-          }
-          return user;
-        });
+        setUsers((prevUsers) =>
+          prevUsers.map((user) =>
+            user?.sessionId === selectedUser.sessionId
+              ? {
+                  ...user,
+                  conversation: [...(user?.conversation || []), updatedMessage],
+                  lastMessage: messageText,
+                  timestamp: new Date(),
+                }
+              : user
+          )
+        );
 
-        setUsers(updatedUsersWithResponse);
+        // Update selected user
         setSelectedUser((prev) =>
           prev
             ? {
                 ...prev,
-                conversation: [...(prev.conversation || []), userResponse],
-                lastMessage: userResponse.text,
+                conversation: [...(prev.conversation || []), updatedMessage],
+                lastMessage: messageText,
                 timestamp: new Date(),
-                unread: (prev.unread || 0) + 1,
               }
             : null
         );
-        setIsTyping(false);
-        setIsLoading(false);
-      }, 2000);
-    }, 500);
-  }, [newMessage, selectedUser, users, isLoading]);
 
-  // Handle keyboard shortcuts
+        setNewMessage('');
+      }
+    } catch (error) {
+      console.log("error in sending message", error);
+      setError("Failed to send message. Please try again.");
+      setTimeout(() => setError(null), 3000);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [newMessage, selectedUser, isLoading, socketConnected]);
+
+  const handleTyping = useCallback((isTyping) => {
+    if (selectedUser && socketRef.current && socketConnected) {
+      socketRef.current.emit("admin_typing", {
+        sessionId: selectedUser.sessionId,
+        isTyping: isTyping
+      });
+    }
+  }, [selectedUser, socketConnected]);
+
   const handleKeyPress = useCallback(
     (e) => {
       if (e.key === 'Enter' && !e.shiftKey) {
@@ -233,64 +348,74 @@ const ClientChatPage = () => {
     [handleSendMessage]
   );
 
-  // Mark messages as read
-  const markAsRead = useCallback((userId) => {
+  const markAsRead = useCallback((sessionId) => {
+    // Update in UI
     setUsers((prevUsers) =>
       prevUsers.map((user) =>
-        user?.id === userId ? { ...user, unread: 0 } : user
+        user?.sessionId === sessionId ? { ...user, unread: 0 } : user
       )
     );
+    
+    axios.post(`${import.meta.env.VITE_SERVER_URL}/api/chat/mark-read`, { sessionId })
+      .catch(err => console.log("Error marking as read:", err));
   }, []);
 
-  // Toggle star conversation
-  const toggleStarUser = useCallback((userId) => {
+  const toggleStarUser = useCallback((sessionId) => {
     setUsers((prevUsers) =>
       prevUsers.map((user) =>
-        user?.id === userId ? { ...user, isStarred: !user?.isStarred } : user
+        user?.sessionId === sessionId ? { ...user, isStarred: !user?.isStarred } : user
       )
     );
     setSelectedUser((prev) =>
-      prev && prev.id === userId ? { ...prev, isStarred: !prev.isStarred } : prev
+      prev && prev.sessionId === sessionId ? { ...prev, isStarred: !prev.isStarred } : prev
     );
+    
+    axios.put(`${import.meta.env.VITE_SERVER_URL}/api/chat/star/${sessionId}`)
+      .catch(err => console.log("Error updating star status:", err));
   }, []);
 
-  // Archive conversation
-  const archiveConversation = useCallback((userId) => {
+  const archiveConversation = useCallback((sessionId) => {
     setUsers((prevUsers) =>
       prevUsers.map((user) =>
-        user?.id === userId ? { ...user, isArchived: true } : user
+        user?.sessionId === sessionId ? { ...user, isArchived: true } : user
       )
     );
-    if (selectedUser?.id === userId) {
+    if (selectedUser?.sessionId === sessionId) {
       setSelectedUser(null);
     }
     setAnchorEl(null);
+    
+    axios.put(`${import.meta.env.VITE_SERVER_URL}/api/chat/archive/${sessionId}`)
+      .catch(err => console.log("Error archiving conversation:", err));
   }, [selectedUser]);
 
-  // Block user
-  const blockUser = useCallback((userId) => {
+  const blockUser = useCallback((sessionId) => {
     setUsers((prevUsers) =>
       prevUsers.map((user) =>
-        user?.id === userId ? { ...user, isBlocked: true } : user
+        user?.sessionId === sessionId ? { ...user, isBlocked: true } : user
       )
     );
-    if (selectedUser?.id === userId) {
+    if (selectedUser?.sessionId === sessionId) {
       setSelectedUser(null);
     }
     setAnchorEl(null);
+    
+    axios.put(`${import.meta.env.VITE_SERVER_URL}/api/chat/block/${sessionId}`)
+      .catch(err => console.log("Error blocking user:", err));
   }, [selectedUser]);
 
-  // Mark conversation as unread
-  const markAsUnread = useCallback((userId) => {
+  const markAsUnread = useCallback((sessionId) => {
     setUsers((prevUsers) =>
       prevUsers.map((user) =>
-        user?.id === userId ? { ...user, unread: Math.max(user?.unread || 0, 1) } : user
+        user?.sessionId === sessionId ? { ...user, unread: Math.max(user?.unread || 0, 1) } : user
       )
     );
     setAnchorEl(null);
+    
+    axios.put(`${import.meta.env.VITE_SERVER_URL}/api/chat/unread/${sessionId}`)
+      .catch(err => console.log("Error marking as unread:", err));
   }, []);
 
-  // Handle context menu
   const handleMenuOpen = useCallback((event, user) => {
     setAnchorEl(event.currentTarget);
     if (user) {
@@ -302,12 +427,10 @@ const ClientChatPage = () => {
     setAnchorEl(null);
   };
 
-  // Refresh handler
   const handleRefresh = useCallback(() => {
     fetchChats();
   }, []);
 
-  // Loading state
   if (isFetching) {
     return (
       <Box
@@ -328,8 +451,7 @@ const ClientChatPage = () => {
     );
   }
 
-  // Error state
-  if (error) {
+  if (error && !users.length) {
     return (
       <Box
         sx={{
@@ -366,7 +488,21 @@ const ClientChatPage = () => {
         position: 'relative',
       }}
     >
-      {/* Mobile Drawer for Sidebar */}
+      {!socketConnected && (
+        <Alert 
+          severity="warning" 
+          sx={{ 
+            position: 'absolute', 
+            top: 16, 
+            right: 16, 
+            zIndex: 1000,
+            borderRadius: 2
+          }}
+        >
+          Connecting to real-time service...
+        </Alert>
+      )}
+
       <Drawer
         variant="temporary"
         open={mobileDrawerOpen}
@@ -391,6 +527,7 @@ const ClientChatPage = () => {
           onSelectUser={(user) => {
             setSelectedUser(user);
             setMobileDrawerOpen(false);
+            setShowDetails(false);
           }}
           searchQuery={searchQuery}
           onSearchChange={setSearchQuery}
@@ -400,7 +537,6 @@ const ClientChatPage = () => {
         />
       </Drawer>
 
-      {/* Desktop Sidebar */}
       <Box
         sx={{
           width: 360,
@@ -427,7 +563,6 @@ const ClientChatPage = () => {
         />
       </Box>
 
-      {/* Main Chat Area */}
       <Box
         sx={{
           flex: 1,
@@ -446,6 +581,7 @@ const ClientChatPage = () => {
               onMenuOpen={(e) => handleMenuOpen(e, selectedUser)}
               onToggleStar={toggleStarUser}
               onRefresh={handleRefresh}
+              socketConnected={socketConnected}
             />
 
             <ChatMessages
@@ -457,7 +593,17 @@ const ClientChatPage = () => {
             <ChatInput
               ref={inputRef}
               value={newMessage}
-              onChange={setNewMessage}
+              onChange={(value) => {
+                setNewMessage(value);
+                if (value.trim()) {
+                  handleTyping(true);
+                  // Clear typing indicator after delay
+                  clearTimeout(window.typingTimeout);
+                  window.typingTimeout = setTimeout(() => {
+                    handleTyping(false);
+                  }, 1000);
+                }
+              }}
               onSend={handleSendMessage}
               onKeyPress={handleKeyPress}
               disabled={selectedUser?.isBlocked || isLoading}
@@ -514,7 +660,7 @@ const ClientChatPage = () => {
       >
         <MenuItem
           onClick={() => {
-            if (contextMenuUser) markAsUnread(contextMenuUser.id);
+            if (contextMenuUser) markAsUnread(contextMenuUser.sessionId);
           }}
         >
           <IoRepeat size={18} style={{ marginRight: 12 }} />
@@ -523,7 +669,7 @@ const ClientChatPage = () => {
 
         <MenuItem
           onClick={() => {
-            if (contextMenuUser) toggleStarUser(contextMenuUser.id);
+            if (contextMenuUser) toggleStarUser(contextMenuUser.sessionId);
           }}
         >
           {contextMenuUser?.isStarred ? (
@@ -541,7 +687,7 @@ const ClientChatPage = () => {
 
         <MenuItem
           onClick={() => {
-            if (contextMenuUser) archiveConversation(contextMenuUser.id);
+            if (contextMenuUser) archiveConversation(contextMenuUser.sessionId);
           }}
         >
           <IoArchive size={18} style={{ marginRight: 12 }} />
@@ -552,7 +698,7 @@ const ClientChatPage = () => {
 
         <MenuItem
           onClick={() => {
-            if (contextMenuUser) blockUser(contextMenuUser.id);
+            if (contextMenuUser) blockUser(contextMenuUser.sessionId);
           }}
           sx={{ color: 'error.main' }}
         >

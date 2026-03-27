@@ -14,7 +14,7 @@ import { IoCheckmarkCircle, IoCheckmarkDone } from 'react-icons/io5';
 import { formatMessageTime } from '../../utils/chatHelpers';
 
 const ChatMessages = (
-  ({ messages, isTyping }) => {
+  ({ messages }) => {
     const theme = useTheme();
 
     return (
@@ -63,10 +63,10 @@ const ChatMessages = (
           <>
             {messages.map((message) => (
               <Box
-                key={message.id}
+                key={message._id}
                 sx={{
                   display: 'flex',
-                  justifyContent: message.sender === 'admin' ? 'flex-end' : 'flex-start',
+                  justifyContent: message.role === 'admin' ? 'flex-end' : 'flex-start',
                   animation: 'slideIn 0.3s ease-in-out',
                   '@keyframes slideIn': {
                     from: {
@@ -85,7 +85,7 @@ const ChatMessages = (
                     maxWidth: { xs: '85%', sm: '70%' },
                     display: 'flex',
                     flexDirection: 'column',
-                    alignItems: message.sender === 'admin' ? 'flex-end' : 'flex-start',
+                    alignItems: message.role === 'admin' ? 'flex-end' : 'flex-start',
                   }}
                 >
                   <Paper
@@ -93,25 +93,25 @@ const ChatMessages = (
                     sx={{
                       p: 1.5,
                       bgcolor:
-                        message.sender === 'admin'
+                        message.role === 'admin'
                           ? theme.palette.primary.main
                           : theme.palette.mode === 'light'
                             ? '#f0f0f0'
                             : theme.palette.grey[800],
                       color:
-                        message.sender === 'admin'
+                        message.role === 'admin'
                           ? theme.palette.primary.contrastText
                           : theme.palette.text.primary,
                       borderRadius: 2,
                       wordBreak: 'break-word',
                       boxShadow:
-                        message.sender === 'admin'
+                        message.role === 'admin'
                           ? `0 2px 8px ${alpha(theme.palette.primary.main, 0.2)}`
                           : `0 1px 3px ${alpha(theme.palette.common.black, 0.1)}`,
                       transition: 'all 0.2s ease',
                       '&:hover': {
                         boxShadow:
-                          message.sender === 'admin'
+                          message.role === 'admin'
                             ? `0 4px 12px ${alpha(theme.palette.primary.main, 0.3)}`
                             : `0 2px 6px ${alpha(theme.palette.common.black, 0.15)}`,
                       },
@@ -124,21 +124,8 @@ const ChatMessages = (
                         lineHeight: 1.5,
                       }}
                     >
-                      {message.text}
+                      {message.message}
                     </Typography>
-                    {message.edited && (
-                      <Typography
-                        variant="caption"
-                        sx={{
-                          display: 'block',
-                          mt: 0.5,
-                          opacity: 0.7,
-                          fontStyle: 'italic',
-                        }}
-                      >
-                        (edited)
-                      </Typography>
-                    )}
                   </Paper>
                   <Stack
                     direction="row"
@@ -147,9 +134,9 @@ const ChatMessages = (
                     sx={{ mt: 0.5 }}
                   >
                     <Typography variant="caption" color="text.secondary">
-                      {formatMessageTime(message.timestamp)}
+                      {/* {formatMessageTime(message.createdAt)} */}
                     </Typography>
-                    {message.sender === 'admin' && (
+                    {message.role === 'admin' && (
                       message.read ? (
                         <IoCheckmarkDone
                           size={14}
@@ -168,39 +155,6 @@ const ChatMessages = (
                 </Box>
               </Box>
             ))}
-
-            {isTyping && (
-              <Box sx={{ display: 'flex', justifyContent: 'flex-start' }}>
-                <Paper
-                  elevation={0}
-                  sx={{
-                    p: 1.5,
-                    bgcolor:
-                      theme.palette.mode === 'light'
-                        ? '#f0f0f0'
-                        : theme.palette.grey[800],
-                    borderRadius: 2,
-                    animation: 'pulse 1.5s ease-in-out infinite',
-                    '@keyframes pulse': {
-                      '0%, 100%': {
-                        opacity: 1,
-                      },
-                      '50%': {
-                        opacity: 0.6,
-                      },
-                    },
-                  }}
-                >
-                  <Stack direction="row" spacing={1} alignItems="center">
-                    <CircularProgress size={16} />
-                    <Typography variant="caption" color="text.secondary">
-                      typing...
-                    </Typography>
-                  </Stack>
-                </Paper>
-              </Box>
-            )}
-            {/* <div ref={ref} /> */}
           </>
         )}
       </Box>

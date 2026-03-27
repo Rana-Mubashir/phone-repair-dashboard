@@ -21,25 +21,31 @@ export const getStatusColor = (status) => {
  * and date for older messages
  */
 export const formatMessageTime = (date) => {
+  const parsedDate = new Date(date); // ✅ convert string to Date
   const now = new Date();
-  
-  if (isToday(date)) {
-    return format(date, 'h:mm a');
-  } else if (isYesterday(date)) {
+
+  if (isToday(parsedDate)) {
+    return format(parsedDate, 'h:mm a');
+  } else if (isYesterday(parsedDate)) {
     return 'Yesterday';
-  } else if (isThisWeek(date)) {
-    return format(date, 'EEEE');
+  } else if (isThisWeek(parsedDate)) {
+    return format(parsedDate, 'EEEE');
   } else {
-    return format(date, 'MMM d, yyyy');
+    return format(parsedDate, 'MMM d, yyyy');
   }
 };
+
 
 /**
  * Format timestamp for list items - shows relative time
  */
 export const formatListItemTime = (date) => {
+  const parsedDate = new Date(date); // ✅ handle string input
+
+  if (isNaN(parsedDate)) return "";
+
   const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
+  const diffMs = now.getTime() - parsedDate.getTime();
   const diffMins = Math.floor(diffMs / (1000 * 60));
   const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
   const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
@@ -49,13 +55,14 @@ export const formatListItemTime = (date) => {
   } else if (diffMins < 60) {
     return `${diffMins}m ago`;
   } else if (diffHours < 24) {
-    return format(date, 'h:mm a');
+    return format(parsedDate, 'h:mm a');
   } else if (diffDays < 7) {
-    return format(date, 'EEEE');
+    return format(parsedDate, 'EEEE');
   } else {
-    return format(date, 'MMM d');
+    return format(parsedDate, 'MMM d');
   }
 };
+
 
 /**
  * Truncate text to specified length

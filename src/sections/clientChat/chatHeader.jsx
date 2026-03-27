@@ -77,7 +77,7 @@ const ChatHeader= ({
                   fontWeight: 'bold',
                 }}
               >
-                {user.avatar}
+                U
               </Avatar>
             </Badge>
 
@@ -89,44 +89,9 @@ const ChatHeader= ({
                   noWrap
                   sx={{ flex: 1 }}
                 >
-                  {user.name}
+                  {user.chatId}
                 </Typography>
-                {user.isStarred && (
-                  <Tooltip title="Starred conversation">
-                    <Typography
-                      variant="caption"
-                      sx={{
-                        bgcolor: alpha('#ffc107', 0.15),
-                        color: '#f59e0b',
-                        px: 1,
-                        py: 0.5,
-                        borderRadius: 1,
-                        whiteSpace: 'nowrap',
-                      }}
-                    >
-                      ★ Starred
-                    </Typography>
-                  </Tooltip>
-                )}
               </Stack>
-              <Typography
-                variant="caption"
-                color="text.secondary"
-                noWrap
-                sx={{ display: 'block' }}
-              >
-                {user.email}
-              </Typography>
-              <Typography
-                variant="caption"
-                color="text.secondary"
-                sx={{
-                  fontSize: '0.7rem',
-                  textTransform: 'capitalize',
-                }}
-              >
-                {user.status === 'online' ? '● Online' : `● ${user.status}`}
-              </Typography>
             </Box>
           </Stack>
 
@@ -176,21 +141,6 @@ const ChatHeader= ({
           >
             <CardContent>
               <Grid container spacing={2}>
-                <Grid item xs={6} sm={4}>
-                  <Typography variant="caption" color="text.secondary" display="block">
-                    Status
-                  </Typography>
-                  <Typography
-                    variant="body2"
-                    sx={{
-                      mt: 0.5,
-                      textTransform: 'capitalize',
-                    }}
-                  >
-                    {user.status}
-                  </Typography>
-                </Grid>
-
                 <Grid item xs={6} sm={4}>
                   <Typography variant="caption" color="text.secondary" display="block">
                     Total Messages

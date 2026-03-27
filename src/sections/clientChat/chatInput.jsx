@@ -52,22 +52,6 @@ const ChatInput =(
         // ref={containerRef}
       >
         <Stack direction="row" spacing={1} alignItems="flex-end">
-          <Tooltip title="Attach file">
-            <span>
-              <IconButton disabled={disabled || isLoading}>
-                <IoAttach size={20} />
-              </IconButton>
-            </span>
-          </Tooltip>
-
-          <Tooltip title="Add emoji">
-            <span>
-              <IconButton disabled={disabled || isLoading}>
-                <IoHappyOutline size={20} />
-              </IconButton>
-            </span>
-          </Tooltip>
-
           <TextField
             // inputRef={ref}
             fullWidth

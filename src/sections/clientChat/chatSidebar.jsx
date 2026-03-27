@@ -19,7 +19,7 @@ import {
   alpha,
 } from '@mui/material';
 import { IoSearch, IoEllipsisVertical, IoStar, IoStarOutline } from 'react-icons/io5';
-import { getAvatarColor, formatListItemTime } from '../../utils/chatHelpers';
+import { getAvatarColor, formatListItemTime, formatMessageTime } from '../../utils/chatHelpers';
 
 const ChatSidebar = ({
   users,
@@ -178,7 +178,7 @@ const ChatSidebar = ({
                         fontSize: '0.9rem',
                       }}
                     >
-                      {user.avatar || "U"}
+                       U
                     </Avatar>
                   </Badge>
                 </ListItemAvatar>
@@ -202,9 +202,6 @@ const ChatSidebar = ({
                       >
                         {user.chatId}
                       </Typography>
-                      {user.isStarred && (
-                        <IoStar size={14} color="#ffc107" />
-                      )}
                     </Stack>
                   }
                   secondary={
@@ -225,7 +222,7 @@ const ChatSidebar = ({
                           fontSize: '0.75rem',
                         }}
                       >
-                        {user.lastMessage}
+                        {user?.lastMessage.message || "last message"}
                       </Typography>
                     </Stack>
                   }
@@ -263,7 +260,7 @@ const ChatSidebar = ({
                     fontSize: '0.7rem',
                   }}
                 >
-                  {formatListItemTime(new Date(user.timestamp))}
+                  {formatMessageTime(new Date(user.createdAt))}
                 </Typography>
               </ListItem>
 
