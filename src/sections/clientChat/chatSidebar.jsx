@@ -27,13 +27,10 @@ const ChatSidebar = ({
   onSelectUser,
   searchQuery,
   onSearchChange,
-  onMenuOpen,
-  onToggleStar,
   isLoading = false,
 }) => {
   const theme = useTheme();
 
-  // Sort users: starred first, then by unread count, then by timestamp
   const sortedUsers = useMemo(() => {
     return [...users].sort((a, b) => {
       if (a.isStarred !== b.isStarred) {
@@ -139,17 +136,17 @@ const ChatSidebar = ({
             <React.Fragment key={user.id}>
               <ListItem
                 component="div"
-                selected={selectedUser?.id === user.id}
+                selected={selectedUser?._id === user._id}
                 onClick={() => onSelectUser(user)}
                 sx={{
                   py: 1.5,
                   px: 1.5,
                   transition: 'all 0.2s ease',
                   cursor: 'pointer',
-                  bgcolor: selectedUser?.id === user.id
+                  bgcolor: selectedUser?._id === user._id
                     ? alpha(theme.palette.primary.main, 0.08)
                     : 'transparent',
-                  borderLeft: selectedUser?.id === user.id
+                  borderLeft: selectedUser?._id === user._id
                     ? `3px solid ${theme.palette.primary.main}`
                     : '3px solid transparent',
                   '&:hover': {
@@ -160,7 +157,7 @@ const ChatSidebar = ({
                 <ListItemAvatar sx={{ minWidth: 56 }}>
                   <Badge
                     overlap="circular"
-                    variant="dot"
+                    // variant="dot"
                     sx={{
                       '& .MuiBadge-badge': {
                         backgroundColor: user.status === 'online' ? '#4caf50' : '#9e9e9e',
@@ -173,7 +170,7 @@ const ChatSidebar = ({
                   >
                     <Avatar
                       sx={{
-                        bgcolor: getAvatarColor(user.id),
+                        bgcolor:'#45B7D1',
                         fontWeight: 'bold',
                         fontSize: '0.9rem',
                       }}
@@ -222,7 +219,7 @@ const ChatSidebar = ({
                           fontSize: '0.75rem',
                         }}
                       >
-                        {user?.lastMessage.message || "last message"}
+                        {user?.lastMessage || "last message"}
                       </Typography>
                     </Stack>
                   }

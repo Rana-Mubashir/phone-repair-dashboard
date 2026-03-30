@@ -16,11 +16,6 @@ import {
 } from '@mui/material';
 import {
   IoClose,
-  IoRepeat,
-  IoStar,
-  IoStarOutline,
-  IoArchive,
-  IoBan,
   IoRefresh,
 } from 'react-icons/io5';
 import ChatSidebar from './chatSidebar';
@@ -33,7 +28,6 @@ import { io } from "socket.io-client";
 const ClientChatPage = () => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
-  const isTablet = useMediaQuery(theme.breakpoints.down('lg'));
 
   const [users, setUsers] = useState([]);
   const [selectedUser, setSelectedUser] = useState(null);
@@ -41,13 +35,9 @@ const ClientChatPage = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
   const [showDetails, setShowDetails] = useState(false);
-  const [isTyping, setIsTyping] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isFetching, setIsFetching] = useState(true);
   const [error, setError] = useState(null);
-  const [anchorEl, setAnchorEl] = useState(null);
-  const [contextMenuUser, setContextMenuUser] = useState(null);
-  const [socketConnected, setSocketConnected] = useState(false);
 
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
@@ -55,37 +45,24 @@ const ClientChatPage = () => {
 
   useEffect(() => {
 
-   socketRef.current.on("connect", () => {
-      console.log("Socket connected");
-      socketRef.current.emit("join", sessionId);
-    });
-    
-    // Socket connection events
-    socketRef.current.on("connect", () => {
-      console.log("Admin socket connected:", socketRef.current.id);
-      setSocketConnected(true);
-    });
+    socketRef.current = io(import.meta.env.VITE_SERVER_URL);
 
-    socketRef.current.on("disconnect", () => {
-      console.log("Admin socket disconnected");
-      setSocketConnected(false);
-    });
+    if (selectedUser) {
+      socketRef.current.on("connect", () => {
+        console.log("Socket connected");
+        socketRef.current.emit("join", selectedUser?.sessionId);
+      });
+    }
 
-    socketRef.current.on("connect_error", (error) => {
-      console.error("Socket connection error:", error);
-      setSocketConnected(false);
-    });
-
-    // IMPORTANT: Listen for 'receive_message' event (same as user side)
-    // This is the event that will be emitted when user sends a message
     socketRef.current.on("receive_message", (data) => {
       console.log("Admin received message via socket:", data);
-      
-      // Update users list with new message
+
       setUsers((prevUsers) => {
         const existingUserIndex = prevUsers.findIndex(
           user => user.sessionId === data.sessionId
         );
+
+        console.log("existing user index",existingUserIndex)
 
         const newMessageObj = {
           _id: Date.now(),
@@ -99,7 +76,7 @@ const ClientChatPage = () => {
           // Update existing user
           const updatedUsers = [...prevUsers];
           const user = updatedUsers[existingUserIndex];
-          
+
           updatedUsers[existingUserIndex] = {
             ...user,
             conversation: [...(user.conversation || []), newMessageObj],
@@ -108,7 +85,7 @@ const ClientChatPage = () => {
             // Increment unread count if not the selected user
             unread: selectedUser?.sessionId === data.sessionId ? 0 : (user.unread || 0) + 1
           };
-          
+
           return updatedUsers;
         } else {
           // Add new user to the list
@@ -127,7 +104,7 @@ const ClientChatPage = () => {
             status: 'online',
             avatar: getInitials(`User ${data.sessionId.slice(0, 8)}`)
           };
-          
+
           return [newUser, ...prevUsers];
         }
       });
@@ -145,31 +122,18 @@ const ClientChatPage = () => {
           lastMessage: data.message,
           timestamp: new Date()
         }));
-        
+
         // Mark as read immediately if it's the selected user
         markAsRead(data.sessionId);
       }
     });
 
-    // Listen for typing indicators from users (optional)
-    // socketRef.current.on("user_typing", (data) => {
-    //   console.log("User typing:", data);
-    //   if (selectedUser?.sessionId === data.sessionId) {
-    //     setIsTyping(data.isTyping);
-    //     // Auto-clear typing indicator after 2 seconds
-    //     setTimeout(() => {
-    //       setIsTyping(false);
-    //     }, 2000);
-    //   }
-    // });
-
-    // Cleanup on unmount
     return () => {
       if (socketRef.current) {
         socketRef.current.disconnect();
       }
     };
-  }, [selectedUser]); 
+  }, [selectedUser]);
 
   useEffect(() => {
     fetchChats();
@@ -182,7 +146,7 @@ const ClientChatPage = () => {
 
       const resp = await axios.get(`${import.meta.env.VITE_SERVER_URL}/api/chat`);
       console.log("resp for chats", resp);
-      
+
       if (resp?.data?.chats) {
         const chatsData = Array.isArray(resp.data.chats) ? resp.data.chats : [];
 
@@ -196,7 +160,7 @@ const ClientChatPage = () => {
           unread: chat.unread || 0,
           status: chat.status || 'offline',
           conversation: chat.messages || [],
-          lastMessage: chat.messages?.[chat.messages.length - 1]?.message || '',
+          lastMessage: chat.messages[chat.messages.length - 1]?.message || '',
           timestamp: chat.timestamp ? new Date(chat.timestamp) : new Date(),
           avatar: chat.avatar || getInitials(chat.name || `User ${chat.sessionId?.slice(0, 8)}`),
         }));
@@ -271,9 +235,9 @@ const ClientChatPage = () => {
     try {
       const resp = await axios.post(`${import.meta.env.VITE_SERVER_URL}/api/chat`, newMsg);
       console.log("response for send message", resp);
-      
+
       if (resp.data) {
-        if (socketRef.current && socketConnected) {
+        if (socketRef.current) {
           socketRef.current.emit("send_message", {
             sessionId: selectedUser.sessionId,
             message: messageText,
@@ -297,11 +261,11 @@ const ClientChatPage = () => {
           prevUsers.map((user) =>
             user?.sessionId === selectedUser.sessionId
               ? {
-                  ...user,
-                  conversation: [...(user?.conversation || []), updatedMessage],
-                  lastMessage: messageText,
-                  timestamp: new Date(),
-                }
+                ...user,
+                conversation: [...(user?.conversation || []), updatedMessage],
+                lastMessage: messageText,
+                timestamp: new Date(),
+              }
               : user
           )
         );
@@ -310,11 +274,11 @@ const ClientChatPage = () => {
         setSelectedUser((prev) =>
           prev
             ? {
-                ...prev,
-                conversation: [...(prev.conversation || []), updatedMessage],
-                lastMessage: messageText,
-                timestamp: new Date(),
-              }
+              ...prev,
+              conversation: [...(prev.conversation || []), updatedMessage],
+              lastMessage: messageText,
+              timestamp: new Date(),
+            }
             : null
         );
 
@@ -327,16 +291,8 @@ const ClientChatPage = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [newMessage, selectedUser, isLoading, socketConnected]);
+  }, [newMessage, selectedUser, isLoading]);
 
-  const handleTyping = useCallback((isTyping) => {
-    if (selectedUser && socketRef.current && socketConnected) {
-      socketRef.current.emit("admin_typing", {
-        sessionId: selectedUser.sessionId,
-        isTyping: isTyping
-      });
-    }
-  }, [selectedUser, socketConnected]);
 
   const handleKeyPress = useCallback(
     (e) => {
@@ -355,7 +311,7 @@ const ClientChatPage = () => {
         user?.sessionId === sessionId ? { ...user, unread: 0 } : user
       )
     );
-    
+
     axios.post(`${import.meta.env.VITE_SERVER_URL}/api/chat/mark-read`, { sessionId })
       .catch(err => console.log("Error marking as read:", err));
   }, []);
@@ -369,63 +325,11 @@ const ClientChatPage = () => {
     setSelectedUser((prev) =>
       prev && prev.sessionId === sessionId ? { ...prev, isStarred: !prev.isStarred } : prev
     );
-    
+
     axios.put(`${import.meta.env.VITE_SERVER_URL}/api/chat/star/${sessionId}`)
       .catch(err => console.log("Error updating star status:", err));
   }, []);
 
-  const archiveConversation = useCallback((sessionId) => {
-    setUsers((prevUsers) =>
-      prevUsers.map((user) =>
-        user?.sessionId === sessionId ? { ...user, isArchived: true } : user
-      )
-    );
-    if (selectedUser?.sessionId === sessionId) {
-      setSelectedUser(null);
-    }
-    setAnchorEl(null);
-    
-    axios.put(`${import.meta.env.VITE_SERVER_URL}/api/chat/archive/${sessionId}`)
-      .catch(err => console.log("Error archiving conversation:", err));
-  }, [selectedUser]);
-
-  const blockUser = useCallback((sessionId) => {
-    setUsers((prevUsers) =>
-      prevUsers.map((user) =>
-        user?.sessionId === sessionId ? { ...user, isBlocked: true } : user
-      )
-    );
-    if (selectedUser?.sessionId === sessionId) {
-      setSelectedUser(null);
-    }
-    setAnchorEl(null);
-    
-    axios.put(`${import.meta.env.VITE_SERVER_URL}/api/chat/block/${sessionId}`)
-      .catch(err => console.log("Error blocking user:", err));
-  }, [selectedUser]);
-
-  const markAsUnread = useCallback((sessionId) => {
-    setUsers((prevUsers) =>
-      prevUsers.map((user) =>
-        user?.sessionId === sessionId ? { ...user, unread: Math.max(user?.unread || 0, 1) } : user
-      )
-    );
-    setAnchorEl(null);
-    
-    axios.put(`${import.meta.env.VITE_SERVER_URL}/api/chat/unread/${sessionId}`)
-      .catch(err => console.log("Error marking as unread:", err));
-  }, []);
-
-  const handleMenuOpen = useCallback((event, user) => {
-    setAnchorEl(event.currentTarget);
-    if (user) {
-      setContextMenuUser(user);
-    }
-  }, []);
-
-  const handleMenuClose = () => {
-    setAnchorEl(null);
-  };
 
   const handleRefresh = useCallback(() => {
     fetchChats();
@@ -488,21 +392,6 @@ const ClientChatPage = () => {
         position: 'relative',
       }}
     >
-      {!socketConnected && (
-        <Alert 
-          severity="warning" 
-          sx={{ 
-            position: 'absolute', 
-            top: 16, 
-            right: 16, 
-            zIndex: 1000,
-            borderRadius: 2
-          }}
-        >
-          Connecting to real-time service...
-        </Alert>
-      )}
-
       <Drawer
         variant="temporary"
         open={mobileDrawerOpen}
@@ -531,7 +420,6 @@ const ClientChatPage = () => {
           }}
           searchQuery={searchQuery}
           onSearchChange={setSearchQuery}
-          onMenuOpen={handleMenuOpen}
           onToggleStar={toggleStarUser}
           isLoading={isFetching}
         />
@@ -557,7 +445,6 @@ const ClientChatPage = () => {
           }}
           searchQuery={searchQuery}
           onSearchChange={setSearchQuery}
-          onMenuOpen={handleMenuOpen}
           onToggleStar={toggleStarUser}
           isLoading={isFetching}
         />
@@ -578,15 +465,12 @@ const ClientChatPage = () => {
               user={selectedUser}
               showDetails={showDetails}
               onShowDetails={setShowDetails}
-              onMenuOpen={(e) => handleMenuOpen(e, selectedUser)}
               onToggleStar={toggleStarUser}
               onRefresh={handleRefresh}
-              socketConnected={socketConnected}
             />
 
             <ChatMessages
               messages={selectedUser?.conversation || []}
-              isTyping={isTyping}
               messagesEndRef={messagesEndRef}
             />
 
@@ -595,14 +479,6 @@ const ClientChatPage = () => {
               value={newMessage}
               onChange={(value) => {
                 setNewMessage(value);
-                if (value.trim()) {
-                  handleTyping(true);
-                  // Clear typing indicator after delay
-                  clearTimeout(window.typingTimeout);
-                  window.typingTimeout = setTimeout(() => {
-                    handleTyping(false);
-                  }, 1000);
-                }
               }}
               onSend={handleSendMessage}
               onKeyPress={handleKeyPress}
@@ -649,63 +525,6 @@ const ClientChatPage = () => {
           </Box>
         )}
       </Box>
-
-      {/* Context Menu */}
-      <Menu
-        anchorEl={anchorEl}
-        open={Boolean(anchorEl)}
-        onClose={handleMenuClose}
-        transformOrigin={{ horizontal: 'right', vertical: 'top' }}
-        anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}
-      >
-        <MenuItem
-          onClick={() => {
-            if (contextMenuUser) markAsUnread(contextMenuUser.sessionId);
-          }}
-        >
-          <IoRepeat size={18} style={{ marginRight: 12 }} />
-          Mark as Unread
-        </MenuItem>
-
-        <MenuItem
-          onClick={() => {
-            if (contextMenuUser) toggleStarUser(contextMenuUser.sessionId);
-          }}
-        >
-          {contextMenuUser?.isStarred ? (
-            <>
-              <IoStar size={18} style={{ marginRight: 12, color: '#ffc107' }} />
-              Remove Star
-            </>
-          ) : (
-            <>
-              <IoStarOutline size={18} style={{ marginRight: 12 }} />
-              Star Conversation
-            </>
-          )}
-        </MenuItem>
-
-        <MenuItem
-          onClick={() => {
-            if (contextMenuUser) archiveConversation(contextMenuUser.sessionId);
-          }}
-        >
-          <IoArchive size={18} style={{ marginRight: 12 }} />
-          Archive
-        </MenuItem>
-
-        <Divider />
-
-        <MenuItem
-          onClick={() => {
-            if (contextMenuUser) blockUser(contextMenuUser.sessionId);
-          }}
-          sx={{ color: 'error.main' }}
-        >
-          <IoBan size={18} style={{ marginRight: 12 }} />
-          Block User
-        </MenuItem>
-      </Menu>
     </Box>
   );
 };

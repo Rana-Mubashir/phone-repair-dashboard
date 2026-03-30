@@ -58,7 +58,7 @@ const ChatHeader= ({
           <Stack direction="row" alignItems="center" spacing={2} sx={{ minWidth: 0, flex: 1 }}>
             <Badge
               overlap="circular"
-              variant="dot"
+              // variant="dot"
               sx={{
                 '& .MuiBadge-badge': {
                   bgcolor: getStatusColor(user.status),
@@ -71,7 +71,7 @@ const ChatHeader= ({
             >
               <Avatar
                 sx={{
-                  bgcolor: getAvatarColor(user.id),
+                  bgcolor:'#45B7D1',
                   width: 48,
                   height: 48,
                   fontWeight: 'bold',
